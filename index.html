@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='9' ry='3'></ellipse><path d='M3 5V19A9 3 0 0 0 21 19V5'></path><path d='M3 12A9 3 0 0 0 21 12'></path></svg>">
+    <title>LTF Spool Manager</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+<style>
+    :root {
+        --bg: #0b0f1a; --card: #161b2b; --text: #ffffff;
+        --accent: #3b82f6; --success: #10b981; --danger: #ef4444; --border: #2d364d;
+    }
+
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; user-select: none; touch-action: manipulation; }
+    header { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1rem; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 1rem; padding-bottom: 120px; }
+
+    /* DASHBOARD CARDS */
+    #dashboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.2rem; }
+    .card { 
+        background: linear-gradient(145deg, #1e253a, #161b2b);
+        border-radius: 20px; padding: 1.5rem; border: 1px solid var(--border); 
+        cursor: pointer; transition: 0.3s; position: relative; overflow: hidden;
+        display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-4px); }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .card-title { font-size: 1.4rem; font-weight: 800; }
+    .card-brand { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+    .color-indicator { width: 14px; height: 14px; border-radius: 50%; background: var(--glow-color); box-shadow: 0 0 10px var(--glow-color); border: 2px solid rgba(255,255,255,0.2); }
+    .progress-bar { background: rgba(0,0,0,0.3); height: 8px; border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease-out; }
+    .card-footer { display: flex; justify-content: space-between; align-items: flex-end; }
+    .weight-text { font-size: 1.1rem; font-weight: 700; }
+
+    /* FAB SYSTEM & TOOLTIPS */
+    .fab-stack { position: fixed; bottom: 2rem; right: 2rem; display: flex; flex-direction: column-reverse; align-items: center; gap: 15px; z-index: 1000; }
+    .fab-stack button { position: relative; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+    
+    /* Tooltip Base */
+    .fab-stack button::before {
+        content: attr(data-label);
+        position: absolute;
+        right: 120%;
+        background: #1e253a;
+        color: #64748b;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: 0.2s;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        transform: rotate(0deg) !important;
+    }
+
+    @media (hover: hover) { .fab-stack button:hover::before { opacity: 1; right: 110%; }}
+
+    .fab-add { width: 64px; height: 64px; border-radius: 32px; background: var(--success); color: white; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); }
+    .settings-group { display: flex; flex-direction: column-reverse; align-items: center; gap: 10px; }
+    .fab-settings { width: 48px; height: 48px; border-radius: 24px; background: var(--card); color: #64748b; border: 1px solid var(--border) !important; }
+    .fab-settings.active { background: var(--accent); color: white; }
+    
+    .fab-settings { transition: background 0.2s ease-out, color 0.2s ease-out; }
+    .fab-settings svg, .fab-settings i { transition: transform 0.2s ease-out !important; }
+    .fab-settings.active svg, .fab-settings.active i { transform: rotate(90deg); }
+    .fab-stack button::before { transform: none !important; transition: opacity 0.2s, right 0.2s !important; }
+        
+    .settings-subs { display: none; flex-direction: column-reverse; gap: 10px; }
+    .settings-subs.show { display: flex; animation: slideUp 0.2s ease-out; }
+    .fab-mini { width: 40px; height: 40px; border-radius: 20px; background: #1e253a; color: white; border: 1px solid var(--border) !important; }
+    
+    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+
+/* MODALS */
+.modal { 
+    display: none; 
+    position: fixed; 
+    inset: 0; 
+    background: rgba(0,0,0,0); 
+    align-items: center; 
+    justify-content: center; 
+    z-index: 2000; 
+    padding: 10px; 
+    transition: background 0.2s ease;
+}
+
+.modal.show { 
+    display: flex; 
+    background: rgba(0,0,0,0.85); 
+}
+
+.modal-content { 
+    background: var(--card); 
+    padding: 1.5rem; 
+    border-radius: 24px; 
+    width: 100%; 
+    max-width: 420px; 
+    position: relative;
+    border: 1px solid var(--border); 
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    
+    /* ANIMAZIONE */
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal.show .modal-content {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.close-modal { 
+    position: absolute; 
+    top: 15px; 
+    right: 15px; 
+    cursor: pointer; 
+    color: #64748b; 
+    z-index: 10; 
+    line-height: 1;
+}
+
+.close-modal { 
+    position: absolute; 
+    top: 20px; 
+    right: 20px; 
+    cursor: pointer; 
+    color: #64748b; 
+    line-height: 1;
+    z-index: 100;
+}
+    
+    .section-label { font-size: 0.7rem; font-weight: 800; color: #4b5563; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px; }
+    input, select { background: var(--bg); border: 1px solid var(--border); color: white; padding: 0.7rem; border-radius: 10px; width: 100%; box-sizing: border-box; outline: none; font-size: 0.9rem; }
+    input:focus { border-color: var(--accent); }
+
+    .row { display: flex; gap: 10px; align-items: center; }
+    .row > * { flex: 1; }
+
+    /* PICKER & CHIPS */
+    .weight-row { display: flex; gap: 6px; align-items: stretch; }
+    .chip { background: var(--bg); border: 1px solid var(--border); padding: 10px 5px; border-radius: 10px; text-align: center; font-size: 0.75rem; cursor: pointer; transition: 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; }
+    .chip.active { background: var(--accent); border-color: var(--accent); font-weight: bold; }
+    .input-custom-weight { flex: 1.5; font-size: 0.8rem !important; padding: 8px !important; }
+
+    .picker-area { background: rgba(0,0,0,0.25); border-radius: 14px; padding: 12px; border: 1px solid var(--border); }
+    .sv-map { width: 100%; height: 180px; border-radius: 4px; position: relative; background: linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, transparent); background-color: red; touch-action: none; margin-bottom: 12px; }
+    .sv-cursor { position: absolute; width: 12px; height: 12px; border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+    .hue-container { position: relative; width: 100%; height: 24px; touch-action: none; margin-bottom: 12px; }
+    .hue-strip { width: 100%; height: 100%; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+    .hue-cursor { position: absolute; top: -2px; width: 6px; height: 26px; background: white; border-radius: 4px; border: 1px solid #000; transform: translateX(-50%); pointer-events: none; }
+    .preview-box { height: 32px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 800; border: 1px solid var(--border); font-size: 0.7rem; }
+
+    .color-presets { display: flex; justify-content: space-between; margin-bottom: 12px; padding: 0 4px; }
+    .preset-dot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15); cursor: pointer; transition: 0.2s; }
+    .preset-dot.active { border-color: white; transform: scale(1.15); box-shadow: 0 0 12px rgba(255,255,255,0.2); }
+
+    .btn { border: none; padding: 0.9rem; border-radius: 12px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); width: auto; }
+
+    .close-modal { transition: color 0.2s ease, transform 0.2s ease; }
+    .close-modal:hover { color: var(--danger) !important; transform: scale(1.1) rotate(90deg); }
+    .close-modal svg { display: block; }
+    
+    /* DETAILS & HISTORY */
+    .compact-info-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 16px; border: 1px solid var(--border); margin-bottom: 15px; }
+    .compact-info-row h1 { margin: 0; font-size: 1.8rem; }
+    
+    .history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border); }
+    .history-item:last-child { border-bottom: none; }
+    .history-info { flex: 1; }
+    .history-info span { font-size: 0.9rem; font-weight: 600; display: block; }
+    .history-info small { opacity: 0.3; font-size: 0.75rem; }
+    .history-actions { display: flex; align-items: center; gap: 12px; }
+    .history-weight { color: var(--danger); font-weight: 800; font-size: 0.9rem; margin-right: 5px; }
+    
+    .btn-hist-action { color: #4b5563; cursor: pointer; padding: 5px; transition: 0.2s; display: flex; align-items: center; }
+    .btn-hist-action:hover.edit { color: var(--accent); }
+    .btn-hist-action:hover.del { color: var(--danger); }
+
+    #detail-view { display: none; }
+
+    /* TRANSITION DASHBOARD */
+    #main-view, #detail-view {transition: opacity 0.15s ease; opacity: 1;}
+    .fade-out {opacity: 0 !important;}
+
+</style>
+</head>
+<body>
+
+    <header>
+       <h1 style="margin:0;font-size:1.8rem;letter-spacing:-1px;line-height:1;"> <i data-lucide="database" style=" display:inline-block; vertical-align:-0.12em; font-size:1em; width:1em; height:1em;"></i> LTF Spool Manager </h1>
+    </header>
+
+    <div class="container">
+        <div id="main-view">
+            <h3 style="margin-bottom: 1.5rem; opacity: 0.7;">Spool Inventory</h3>
+            <div id="dashboard"></div>
+        </div>
+
+        <div id="detail-view">
+            <button class="btn btn-outline" style="margin-bottom:20px" onclick="showDashboard()">
+                <i data-lucide="arrow-big-left" style="width:18px"></i> Dashboard
+            </button>
+            <div id="detail-info"></div>
+            <div class="section-label" style="margin-bottom:8px; font-size:1rem; line-height:1;"> <i data-lucide="history" style="display:inline-block; vertical-align:-0.12em; font-size:1em; width:1em; height:1em;"></i> Print History </div>
+            <div id="history-container" style="background:var(--card); border-radius:16px; padding:5px; border:1px solid var(--border)"></div>
+        </div>
+    </div>
+
+    <div class="fab-stack">
+    <button class="fab-add" data-label="Add Spool" onclick="handleMasterAction()">
+        <i data-lucide="plus"></i>
+    </button>
+    
+    <div class="settings-group">
+        <button class="fab-settings" id="settings-btn" data-label="Settings" onclick="toggleSettings()">
+            <i data-lucide="settings"></i>
+        </button>
+        <div class="settings-subs" id="settings-subs">
+            </div>
+    </div>
+</div>
+    <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+
+    <div id="modal-bobina" class="modal">
+        <div class="modal-content">
+            <div class="close-modal" onclick="closeModal('modal-bobina')"><i data-lucide="x"></i></div>
+            <h4 id="modal-bobina-title" style="margin:0">New Spool</h4>
+            <div class="section-label">Material & Brand</div>
+            <div class="row">
+                <select id="bobina-mat"><option>PLA</option><option>PLA+</option><option>PLA Rapid</option><option>PETG</option><option>PETG HF</option><option>TPU</option><option>ABS</option></select>
+                <input type="text" id="bobina-marca" placeholder="Brand">
+            </div>
+            <div class="section-label">Weight</div>
+            <div class="weight-row">
+                <div class="chip" onclick="setWeight(250, this)">250g</div>
+                <div class="chip" onclick="setWeight(500, this)">500g</div>
+                <div class="chip" onclick="setWeight(1000, this)">1kg</div>
+                <input type="number" id="bobina-peso-custom" class="input-custom-weight" placeholder="Custom (g)" oninput="clearChips()">
+            </div>
+            <div class="section-label">Color</div>
+            <div class="picker-area">
+                <div class="color-presets">
+                    <div class="preset-dot" style="background:#000000" onclick="setPreset('#000000', this)"></div>
+                    <div class="preset-dot" style="background:#ffffff" onclick="setPreset('#ffffff', this)"></div>
+                    <div class="preset-dot" style="background:#3b82f6" onclick="setPreset('#3b82f6', this)"></div>
+                    <div class="preset-dot" style="background:#10b981" onclick="setPreset('#10b981', this)"></div>
+                    <div class="preset-dot" style="background:#ef4444" onclick="setPreset('#ef4444', this)"></div>
+                </div>
+                <div class="hue-container" onmousedown="startDragH(event)" ontouchstart="startDragH(event)"><div class="hue-strip"></div><div id="hue-cursor" class="hue-cursor"></div></div>
+                <div class="sv-map" id="sv-map" onmousedown="startDragSV(event)" ontouchstart="startDragSV(event)"><div id="sv-cursor" class="sv-cursor"></div></div>
+                <div id="final-preview" class="preview-box">Preview</div>
+            </div>
+            <button class="btn btn-success" onclick="saveBobina()"><i data-lucide="save"></i> Save</button>
+        </div>
+    </div>
+
+    <div id="modal-stampa" class="modal"><div class="modal-content"><div class="close-modal" onclick="closeModal('modal-stampa')"><i data-lucide="x"></i></div><h4 style="margin:0">Add Print Job</h4><div class="section-label">Details</div><input type="number" id="print-peso" placeholder="Print Wheight"><input type="text" id="print-desc" placeholder="Description" style="text-transform: uppercase;"><button class="btn btn-success" onclick="addPrint()"><i data-lucide="diamond-plus"></i> Add</button></div></div>
+    <div id="modal-edit-print" class="modal"><div class="modal-content"><div class="close-modal" onclick="closeModal('modal-edit-print')"><i data-lucide="x"></i></div><h4 style="margin:0">Edit Print Job</h4><div class="section-label">Print Job Data</div><input type="number" id="edit-print-peso" placeholder="Grammi"><input type="text" id="edit-print-desc" placeholder="PROGETTO" style="text-transform: uppercase;"><button class="btn btn-success" onclick="confirmEditPrint()"><i data-lucide="save"></i> Update</button></div></div>
+
+    <div id="modal-confirm" class="modal">
+    <div class="modal-content" style="text-align: center; gap: 20px;">
+        <div id="confirm-icon" style="margin-bottom: 10px;">
+            <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--danger);"></i>
+        </div>
+        <h4 id="confirm-title" style="margin:0; font-size: 1.2rem;">Confirm</h4>
+        <p id="confirm-msg" style="margin:0; opacity: 0.7; font-size: 0.9rem;">This action cannot be undone</p>
+        <div class="row" style="margin-top: 10px;">
+            <button class="btn btn-outline" onclick="closeModal('modal-confirm')">Cancel</button>
+            <button id="confirm-btn-exec" class="btn" style="background: var(--danger); color: white;">Confirm</button>
+        </div>
+    </div>
+    </div>  
+
+    <script>
+let bobine = JSON.parse(localStorage.getItem('LTF_Spool_Manager_DB')) || [];
+let activeIndex = null, editingPrintIdx = null, isDetailMode = false, isEditMode = false;
+let selectedWeight = null, state = { h: 0, s: 100, v: 100, color: '#000000' };
+
+lucide.createIcons();
+
+// --- GESTIONE INPUT TASTIERA E CLICK ESTERNO ---
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const activeModal = document.querySelector('.modal[style*="display: flex"]');
+        if (activeModal) {
+            const confirmBtn = activeModal.querySelector('.btn-success, #confirm-btn-exec');
+            if (confirmBtn) confirmBtn.click();
+        }
+    }
+    if (e.key === 'Escape') {
+        const activeModal = document.querySelector('.modal[style*="display: flex"]');
+        if (activeModal) closeModal(activeModal.id);
+    }
+});
+
+window.addEventListener('mousedown', (e) => {
+    if (e.target.classList.contains('modal')) {
+        closeModal(e.target.id);
+    }
+});
+
+// --- NAVIGAZIONE E CRONOLOGIA (MOUSE BACK BUTTON) ---
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.view === 'detail') {
+        renderDetail(e.state.index);
+    } else {
+        execShowDashboard(true);
+    }
+});
+
+function showDetail(i) {
+    history.pushState({ view: 'detail', index: i }, "");
+    renderDetail(i);
+}
+
+function renderDetail(i) {
+    const mainView = document.getElementById('main-view');
+    const detailView = document.getElementById('detail-view');
+
+    // 1. Inizia sfumatura in uscita
+    mainView.classList.add('fade-out');
+
+    setTimeout(() => {
+        mainView.style.display = 'none';
+        detailView.style.display = 'block';
+        detailView.classList.add('fade-out');
+        activeIndex = i; 
+        isDetailMode = true; 
+        const b = bobine[i];
+        document.getElementById('detail-info').innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+                <div style="width:20px; height:20px; border-radius:50%; background:${b.colore}; border:2px solid white"></div>
+                <h2 style="margin:0">${b.materiale}</h2>
+            </div>
+            <div class="compact-info-row">
+                <div><small style="opacity:0.5; font-size:0.6rem; font-weight:800">Brand</small><div style="font-weight:700">${b.marca}</div></div>
+                <div style="text-align:right"><small style="opacity:0.5; font-size:0.6rem; font-weight:800">Remaining</small><h1>${b.pesoAttuale}<small style="font-size:1rem; opacity:0.6">g</small></h1></div>
+            </div>`;
+        
+        document.querySelector('.fab-add').setAttribute('data-label', 'Add Print Job');
+        renderHistory(b);
+        setTimeout(() => {
+            detailView.classList.remove('fade-out');
+            mainView.classList.remove('fade-out');
+        }, 50);
+    }, 200);
+}
+
+function showDashboard() {
+    if (window.history.state && window.history.state.view === 'detail') {
+        history.back();
+    } else {
+        execShowDashboard();
+    }
+}
+
+function execShowDashboard(fromPopState = false) {
+    const mainView = document.getElementById('main-view');
+    const detailView = document.getElementById('detail-view');
+    
+    isDetailMode = false;
+    detailView.classList.add('fade-out');
+
+    setTimeout(() => {
+        detailView.style.display = 'none';
+        mainView.style.display = 'block';
+        mainView.classList.add('fade-out');
+
+        document.querySelector('.fab-add').setAttribute('data-label', 'Add Spool');
+        renderDashboard();
+
+        setTimeout(() => {
+            mainView.classList.remove('fade-out');
+            detailView.classList.remove('fade-out');
+        }, 50);
+    }, 200);
+}
+
+// --- CORE FUNCTIONS ---
+function handleMasterAction() { if(isDetailMode) openModal('modal-stampa'); else { isEditMode = false; openModal('modal-bobina'); resetBobinaForm(); } }
+
+function toggleSettings() { 
+    const btn = document.getElementById('settings-btn');
+    const subs = document.getElementById('settings-subs');
+    
+    btn.classList.toggle('active'); 
+    const isOpen = btn.classList.contains('active');
+    subs.classList.toggle('show', isOpen);
+
+    if(isOpen) {
+        if(isDetailMode) {
+            subs.innerHTML = `<button class="fab-mini" data-label="Delete Spool" style="color:var(--danger)" onclick="deleteActiveBobina()"><i data-lucide="trash-2"></i></button><button class="fab-mini" data-label="Edit Spool" onclick="openEditBobina()"><i data-lucide="square-pen"></i></button>`;
+        } else {
+            subs.innerHTML = `<button class="fab-mini" data-label="Reset DB" style="color:var(--danger)" onclick="resetMemory()"><i data-lucide="trash-2"></i></button><button class="fab-mini" data-label="Import DB" onclick="document.getElementById('importFile').click()"><i data-lucide="upload"></i></button><button class="fab-mini" data-label="Export DB" onclick="exportData()"><i data-lucide="download"></i></button>`;
+        }
+        lucide.createIcons({ root: subs });
+    }
+    
+    btn.setAttribute('data-label', isOpen ? 'Close settings' : 'Settings');
+}
+
+// --- COLOR PICKER ---
+let draggingH = false, draggingSV = false;
+function startDragH(e) { draggingH = true; handleH(e); }
+function startDragSV(e) { draggingSV = true; handleSV(e); }
+function handleH(e) {
+    const container = document.querySelector('.hue-container'); const rect = container.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+    let x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    state.h = Math.round((x / rect.width) * 360);
+    document.getElementById('hue-cursor').style.left = x + 'px';
+    document.getElementById('sv-map').style.backgroundColor = `hsl(${state.h}, 100%, 50%)`;
+    calculateFinal();
+}
+function handleSV(e) {
+    const container = document.getElementById('sv-map'); const rect = container.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+    const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+    let x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    let y = Math.max(0, Math.min(clientY - rect.top, rect.height));
+    state.s = Math.round((x / rect.width) * 100);
+    state.v = Math.round(100 - (y / rect.height) * 100);
+    document.getElementById('sv-cursor').style.left = x + 'px'; document.getElementById('sv-cursor').style.top = y + 'px';
+    calculateFinal();
+}
+function calculateFinal() {
+    const l = (state.v / 100) * (1 - (state.s / 100) / 2);
+    const sHSL = (l === 0 || l === 1) ? 0 : ((state.v / 100) - l) / Math.min(l, 1 - l);
+    state.color = `hsl(${state.h}, ${Math.round(sHSL * 100)}%, ${Math.round(l * 100)}%)`;
+    updatePreview();
+}
+function updatePreview() { const p = document.getElementById('final-preview'); p.style.backgroundColor = state.color; p.style.color = (state.v > 60 && state.s < 40) ? '#000' : '#fff'; }
+
+window.addEventListener('mousemove', (e) => { if(draggingH) handleH(e); if(draggingSV) handleSV(e); });
+window.addEventListener('touchmove', (e) => { if(draggingH) handleH(e); if(draggingSV) handleSV(e); }, {passive:false});
+window.addEventListener('mouseup', () => { draggingH = false; draggingSV = false; });
+window.addEventListener('touchend', () => { draggingH = false; draggingSV = false; });
+
+// --- CRUD & LOGIC ---
+function setWeight(val, el) { selectedWeight = val; document.querySelectorAll('.chip').forEach(c => c.classList.remove('active')); if(el) el.classList.add('active'); document.getElementById('bobina-peso-custom').value = ''; }
+function clearChips() { selectedWeight = null; document.querySelectorAll('.chip').forEach(c => c.classList.remove('active')); }
+function setPreset(hex, el) { state.color = hex; document.querySelectorAll('.preset-dot').forEach(d => d.classList.remove('active')); if(el) el.classList.add('active'); updatePreview(); }
+function resetBobinaForm() { document.getElementById('modal-bobina-title').innerText = "New Spool"; document.getElementById('bobina-mat').value = 'PLA'; document.getElementById('bobina-marca').value = ''; document.getElementById('bobina-peso-custom').value = ''; clearChips(); }
+
+function openEditBobina() {
+    isEditMode = true; const b = bobine[activeIndex]; toggleSettings();
+    document.getElementById('modal-bobina-title').innerText = "Edit Spool";
+    document.getElementById('bobina-mat').value = b.materiale; document.getElementById('bobina-marca').value = b.marca;
+    document.getElementById('bobina-peso-custom').value = b.pesoIniziale;
+    state.color = b.colore; clearChips(); openModal('modal-bobina'); updatePreview();
+}
+
+function saveBobina() {
+    const p = selectedWeight || Number(document.getElementById('bobina-peso-custom').value);
+    if(!p) return;
+    const mat = document.getElementById('bobina-mat').value;
+    const marca = document.getElementById('bobina-marca').value.toUpperCase() || 'GENERIC';
+    if(isEditMode) {
+        const b = bobine[activeIndex]; const cons = b.pesoIniziale - b.pesoAttuale;
+        b.materiale = mat; b.marca = marca; b.pesoIniziale = p; b.pesoAttuale = p - cons; b.colore = state.color;
+    } else {
+        bobine.push({ materiale: mat, marca: marca, pesoIniziale: p, pesoAttuale: p, colore: state.color, stampe: [], lastUsed: Date.now() });
+    }
+    save(); closeModal('modal-bobina'); isEditMode ? renderDetail(activeIndex) : renderDashboard();
+}
+
+function addPrint() {
+    const p = Number(document.getElementById('print-peso').value); 
+    const d = document.getElementById('print-desc').value.toUpperCase() || 'Generic Print Job';
+    
+    if(p > 0) { 
+        bobine[activeIndex].pesoAttuale -= p; 
+        bobine[activeIndex].lastUsed = Date.now(); 
+        
+        const formattedDate = new Date().toLocaleDateString('it-IT', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+        
+        bobine[activeIndex].stampe.push({ 
+            peso: p, 
+            desc: d, 
+            date: formattedDate 
+        }); 
+        
+        save(); 
+        closeModal('modal-stampa'); 
+        renderDetail(activeIndex); 
+        document.getElementById('print-peso').value = ''; 
+        document.getElementById('print-desc').value = '';
+    }
+}
+
+function openEditPrint(idx) { editingPrintIdx = idx; const s = bobine[activeIndex].stampe[idx]; document.getElementById('edit-print-peso').value = s.peso; document.getElementById('edit-print-desc').value = s.desc; openModal('modal-edit-print'); }
+function confirmEditPrint() {
+    const b = bobine[activeIndex]; const s = b.stampe[editingPrintIdx]; const newP = Number(document.getElementById('edit-print-peso').value);
+    b.pesoAttuale = b.pesoAttuale + s.peso - newP; s.peso = newP; s.desc = document.getElementById('edit-print-desc').value.toUpperCase();
+    save(); closeModal('modal-edit-print'); renderDetail(activeIndex);
+}
+
+// --- MODALS CONFERMA ---
+function askConfirmation(title, msg, actionFn) {
+    document.getElementById('confirm-title').innerText = title;
+    document.getElementById('confirm-msg').innerText = msg;
+    const btn = document.getElementById('confirm-btn-exec');
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.onclick = () => { actionFn(); closeModal('modal-confirm'); };
+    openModal('modal-confirm');
+}
+
+function deletePrint(idx) { askConfirmation("Delete Print", "This action cannot be undone. Proceed?", () => { bobine[activeIndex].pesoAttuale += bobine[activeIndex].stampe[idx].peso; bobine[activeIndex].stampe.splice(idx, 1); save(); renderDetail(activeIndex); }); }
+function deleteActiveBobina() { askConfirmation("Delete Spool", "This action cannot be undone. Proceed?", () => { bobine.splice(activeIndex, 1); save(); if(document.getElementById('settings-subs').classList.contains('show')) toggleSettings(); showDashboard(); }); }
+function resetMemory() { askConfirmation("Reset Database", "This action cannot be undone. Proceed?", () => { bobine = []; save(); renderDashboard(); if(document.getElementById('settings-subs').classList.contains('show')) toggleSettings(); }); }
+
+// --- UTILS ---
+function save() { localStorage.setItem('LTF_Spool_Manager_DB', JSON.stringify(bobine)); }
+function openModal(id) {
+    const modal = document.getElementById(id);
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+    lucide.createIcons();
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    modal.classList.remove('show');
+    setTimeout(() => {
+        if(!modal.classList.contains('show')) modal.style.display = 'none';
+    }, 200);
+}
+function exportData() { const blob = new Blob([JSON.stringify(bobine)], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "LTF_Spool_Manager_DB.json"; a.click(); toggleSettings(); }
+function importData(e) { const r = new FileReader(); r.onload = (ev) => { try { bobine = JSON.parse(ev.target.result); save(); renderDashboard(); } catch(e){alert("Errore")} }; r.readAsText(e.target.files[0]); toggleSettings(); }
+
+function renderDashboard() {
+    const grid = document.getElementById('dashboard'); 
+    grid.innerHTML = bobine.length ? '' : `<div style="grid-column: 1/-1; text-align:center; padding: 60px 20px; opacity:0.3"><p>Nessun filamento.</p></div>`;
+    const sortedBobine = bobine
+        .map((b, index) => ({ ...b, originalIndex: index }))
+        .sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
+
+    sortedBobine.forEach((b) => {
+        const perc = Math.max(0, (b.pesoAttuale / b.pesoIniziale) * 100);
+        grid.innerHTML += `
+            <div class="card" onclick="showDetail(${b.originalIndex})" style="--glow-color: ${b.colore}">
+                <div class="card-header">
+                    <div>
+                        <div class="card-brand">${b.marca}</div>
+                        <div class="card-title">${b.materiale}</div>
+                    </div>
+                    <div class="color-indicator"></div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width:${perc}%; background:${b.colore}"></div>
+                </div>
+                <div class="card-footer">
+                    <div class="weight-text">
+                        ${b.pesoAttuale}g <span style="opacity:0.3; font-weight:400; font-size:0.8rem">/ ${b.pesoIniziale}g</span>
+                    </div>
+                    <div style="font-size:0.8rem; font-weight:800; opacity:0.6">${Math.round(perc)}%</div>
+                </div>
+            </div>`;
+    });
+    lucide.createIcons();
+}
+
+function renderHistory(b) {
+    const hist = document.getElementById('history-container'); hist.innerHTML = b.stampe.length ? '' : '<p style="text-align:center; opacity:0.2; padding:20px">No print history</p>';
+    [...b.stampe].reverse().forEach((s, idx) => {
+        const realIdx = b.stampe.length - 1 - idx;
+        hist.innerHTML += `<div class="history-item"><div class="history-info"><span>${s.desc}</span><small>${s.date}</small></div><div class="history-actions"><div class="history-weight">-${s.peso}g</div><div class="btn-hist-action edit" onclick="openEditPrint(${realIdx})"><i data-lucide="square-pen" style="width:16px"></i></div><div class="btn-hist-action del" onclick="deletePrint(${realIdx})"><i data-lucide="trash-2" style="width:16px"></i></div></div></div>`;
+    });
+    lucide.createIcons();
+}
+
+renderDashboard();
+    </script>
+</body>
+</html>
