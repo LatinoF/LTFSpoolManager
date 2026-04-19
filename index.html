@@ -545,7 +545,7 @@ function importData(e) { const r = new FileReader(); r.onload = (ev) => { try { 
 
 function renderDashboard() {
     const grid = document.getElementById('dashboard'); 
-    grid.innerHTML = bobine.length ? '' : `<div style="grid-column: 1/-1; text-align:center; padding: 60px 20px; opacity:0.3"><p>Nessun filamento.</p></div>`;
+    grid.innerHTML = bobine.length ? '' : `<div style="grid-column: 1/-1; text-align:center; padding: 40px; opacity:0.3"><i data-lucide="package-search" style="width:48px; height:48px; margin-bottom:10px"></i><p>No spool added.<br>Use the + button to add one.</p></div>`;
     const sortedBobine = bobine
         .map((b, index) => ({ ...b, originalIndex: index }))
         .sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
