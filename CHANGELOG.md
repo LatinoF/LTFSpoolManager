@@ -1,5 +1,9 @@
 # LTF Spool Manager - Changelog
 
+## v1.1.6 - 2026-08-02 (patch)
+- Fix: Add Print Job now opens with a clean form every time (weight and description cleared, error styling and placeholder reset) instead of showing the previous error state and values
+- Fix: Edit Print Job clears leftover error styling on the weight field when opened
+
 ## v1.1.5 - 2026-08-02 (patch)
 - Add Print Job / Edit Print Job: invalid weight (empty, zero, negative, non-numeric) now shows a red border on the field, focuses it, clears the value and writes "Enter a weight greater than 0" in the placeholder; typing restores the normal placeholder
 

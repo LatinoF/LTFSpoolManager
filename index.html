@@ -675,7 +675,7 @@ function closeSettingsMenu() {
 }
 
 // --- CORE FUNCTIONS ---
-function handleMasterAction() { if(isDetailMode) openModal('modal-print'); else { isEditMode = false; openModal('modal-spool'); resetSpoolForm(); } }
+function handleMasterAction() { if(isDetailMode) { resetPrintForm(); openModal('modal-print'); } else { isEditMode = false; openModal('modal-spool'); resetSpoolForm(); } }
 
 function toggleSettings() { 
     const btn = document.getElementById('settings-btn');
@@ -885,6 +885,11 @@ function clearWeightError(input, normalPlaceholder) {
     input.classList.remove('input-error');
     input.placeholder = normalPlaceholder;
 }
+function resetPrintForm() {
+    clearWeightError(document.getElementById('print-weight'), 'Print Weight (g)');
+    document.getElementById('print-weight').value = '';
+    document.getElementById('print-description').value = '';
+}
 function addPrint() {
     const p = Number(document.getElementById('print-weight').value); 
     const d = document.getElementById('print-description').value.toUpperCase() || 'Generic Print Job';
@@ -900,7 +905,7 @@ function addPrint() {
     document.getElementById('print-weight').value = ''; document.getElementById('print-description').value = '';
 }
 
-function openEditPrint(idx) { editingPrintIdx = idx; const p = spools[activeIndex].prints[idx]; document.getElementById('edit-print-weight').value = p.weight; document.getElementById('edit-print-description').value = p.description; openModal('modal-edit-print'); }
+function openEditPrint(idx) { editingPrintIdx = idx; const p = spools[activeIndex].prints[idx]; clearWeightError(document.getElementById('edit-print-weight'), 'Weight (g)'); document.getElementById('edit-print-weight').value = p.weight; document.getElementById('edit-print-description').value = p.description; openModal('modal-edit-print'); }
 function confirmEditPrint() {
     const s = spools[activeIndex]; const p = s.prints[editingPrintIdx]; const newW = Number(document.getElementById('edit-print-weight').value);
     if (!(newW > 0)) {
