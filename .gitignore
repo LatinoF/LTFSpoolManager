@@ -1,11 +1,3 @@
-# Backup snapshots stay local-only
-Backups/
-Releases/
-
-# Environment
-.env
-.env.*
-
 # OS
 Thumbs.db
 Desktop.ini
@@ -15,3 +7,8 @@ Desktop.ini
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# Environment
+.env
+.env.*
