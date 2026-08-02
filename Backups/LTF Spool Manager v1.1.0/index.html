@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='9' ry='3'></ellipse><path d='M3 5V19A9 3 0 0 0 21 19V5'></path><path d='M3 12A9 3 0 0 0 21 12'></path></svg>">
+    <title>LTF Spool Manager</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+<style>
+    :root {
+        --bg: #0b0f1a; --card: #161b2b; --text: #ffffff;
+        --accent: rgba(59,130,246,0.8); --success: #10b981; --danger: #ef4444; --border: #2d364d;
+    }
+
+    /* Global settings */
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    margin: 0;
+    user-select: none;
+    touch-action: manipulation;
+}
+
+    /* NOISE OVERLAY */
+    body::before {content: ''; position: fixed; inset: 0; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"); pointer-events: none; z-index: 0; opacity: 0.5;}
+    
+    /* GRID LINES BG */
+    body::after {content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0;}
+
+    
+    header { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1rem; }
+    .app-title { margin: 0; font-size: 1.8rem; font-weight: 900; letter-spacing: -1px; line-height: 1; display: flex; align-items: center; gap: 10px; }
+    .app-title .logo-wrap {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 40px; height: 40px; border-radius: 12px;
+        background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(59,130,246,0.05));
+        border: 1px solid rgba(59,130,246,0.35);
+        color: var(--accent);
+    }
+    .cloud-indicator { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--success); margin-left: 8px; flex-shrink: 0; }
+    .cloud-indicator[hidden] { display: none; }
+    .cloud-indicator.off { color: var(--danger); }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 1rem; padding-bottom: 120px; }
+    .bkg-img{ position:fixed; height:auto; opacity: 1; pointer-events:none; z-index:-1; }
+    /* DASHBOARD CARDS */
+    #dashboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.2rem; }
+    .card { 
+        background: linear-gradient(145deg, #1e253a, #161b2b);
+        border-radius: 20px; padding: 1.5rem; border: 1px solid var(--border); 
+        cursor: pointer; transition: 0.3s; position: relative; overflow: hidden;
+        display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-4px); }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .card-title { font-size: 1.4rem; font-weight: 800; }
+    .card-brand { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+    .color-indicator { width: 14px; height: 14px; border-radius: 50%; background: var(--glow-color); box-shadow: 0 0 10px var(--glow-color); border: 2px solid rgba(255,255,255,0.2); }
+    .progress-bar { background: rgba(0,0,0,0.3); height: 8px; border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease-out; }
+    .card-footer { display: flex; justify-content: space-between; align-items: flex-end; }
+    .weight-text { font-size: 1.1rem; font-weight: 700; }
+
+    /* FAB SYSTEM & TOOLTIPS */
+    .fab-stack { position: fixed; bottom: 2rem; right: 2rem; display: flex; flex-direction: column-reverse; align-items: center; gap: 15px; z-index: 1000; }
+    .fab-stack button { position: relative; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+    
+    /* Tooltip Base */
+    .fab-stack button::before {
+        content: attr(data-label);
+        position: absolute;
+        right: 120%;
+        background: #1e253a;
+        color: #64748b;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: 0.2s;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        transform: rotate(0deg) !important;
+    }
+
+    @media (hover: hover) { .fab-stack button:hover::before { opacity: 1; right: 110%; }}
+
+    .fab-add { width: 64px; height: 64px; border-radius: 32px; background: var(--success); color: white; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); }
+    .settings-group { display: flex; flex-direction: column-reverse; align-items: center; gap: 10px; }
+    .fab-settings { width: 48px; height: 48px; border-radius: 24px; background: var(--card); color: #64748b; border: 1px solid var(--border) !important; }
+    .fab-settings.active { background: var(--accent); color: white; }
+    
+    .fab-settings { transition: background 0.2s ease-out, color 0.2s ease-out; }
+    .fab-settings svg, .fab-settings i { transition: transform 0.2s ease-out !important; }
+    .fab-settings.active svg, .fab-settings.active i { transform: rotate(90deg); }
+    .fab-stack button::before { transform: none !important; transition: opacity 0.2s, right 0.2s !important; }
+        
+    .settings-subs { display: none; flex-direction: column-reverse; gap: 10px; }
+    .settings-subs.show { display: flex; animation: slideUp 0.2s ease-out; }
+    .fab-mini { width: 40px; height: 40px; border-radius: 20px; background: #1e253a; color: white; border: 1px solid var(--border) !important; }
+    
+    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+
+/* MODALS */
+.modal { 
+    display: none; 
+    position: fixed; 
+    inset: 0; 
+    background: rgba(0,0,0,0); 
+    align-items: center; 
+    justify-content: center; 
+    z-index: 2000; 
+    padding: 10px; 
+    transition: background 0.2s ease;
+}
+
+.modal.show { 
+    display: flex; 
+    background: rgba(0,0,0,0.85); 
+}
+
+.modal-content { 
+    background: var(--card); 
+    padding: 1.5rem; 
+    border-radius: 24px; 
+    width: 100%; 
+    max-width: 480px; /* Width reserved for the price field */
+    position: relative;
+    border: 1px solid var(--border); 
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    
+    /* ANIMATION */
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal.show .modal-content {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.close-modal { 
+    position: absolute; 
+    top: 20px; 
+    right: 20px; 
+    cursor: pointer; 
+    color: #64748b; 
+    line-height: 1;
+    z-index: 100;
+}
+    
+    .section-label { font-size: 0.7rem; font-weight: 800; color: #4b5563; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px; }
+    input, select { background: var(--bg); border: 1px solid var(--border); color: white; padding: 0.7rem; border-radius: 10px; width: 100%; box-sizing: border-box; outline: none; font-size: 0.9rem; }
+    input:focus { border-color: var(--accent); }
+
+    .row { display: flex; gap: 10px; align-items: center; }
+    .row > * { flex: 1; }
+
+    /* PICKER & CHIPS */
+    .weight-row { display: flex; gap: 6px; align-items: stretch; }
+    .chip { background: var(--bg); border: 1px solid var(--border); padding: 10px 5px; border-radius: 10px; text-align: center; font-size: 0.75rem; cursor: pointer; transition: 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; }
+    .chip.active { background: var(--accent); border-color: var(--accent); font-weight: bold; }
+    .input-custom-weight { flex: 1.5; font-size: 0.8rem !important; padding: 8px !important; }
+
+    .picker-area { background: rgba(0,0,0,0.25); border-radius: 14px; padding: 12px; border: 1px solid var(--border); }
+    .sv-map { width: 100%; height: 180px; border-radius: 4px; position: relative; background: linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, transparent); background-color: red; touch-action: none; margin-bottom: 12px; }
+    .sv-cursor { position: absolute; width: 12px; height: 12px; border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+    .hue-container { position: relative; width: 100%; height: 24px; touch-action: none; margin-bottom: 12px; }
+    .hue-strip { width: 100%; height: 100%; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+    .hue-cursor { position: absolute; top: -2px; width: 6px; height: 26px; background: white; border-radius: 4px; border: 1px solid #000; transform: translateX(-50%); pointer-events: none; }
+    .preview-box { height: 32px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 800; border: 1px solid var(--border); font-size: 0.7rem; }
+
+    .color-presets { display: flex; justify-content: space-between; margin-bottom: 12px; padding: 0 4px; }
+    .preset-dot { width: 28px; height: 28px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.15); cursor: pointer; transition: 0.2s; }
+    .preset-dot.active { border-color: white; transform: scale(1.15); box-shadow: 0 0 12px rgba(255,255,255,0.2); }
+
+    .btn { border: none; padding: 0.9rem; border-radius: 12px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); width: auto; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .close-modal { transition: color 0.2s ease, transform 0.2s ease; }
+    .close-modal:hover { color: var(--danger) !important; transform: scale(1.1) rotate(90deg); }
+    .close-modal svg { display: block; }
+    
+    /* DETAILS & HISTORY */
+    .compact-info-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 16px; border: 1px solid var(--border); margin-bottom: 15px; }
+    .compact-info-row h1 { margin: 0; font-size: 1.8rem; }
+    
+    .history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border); }
+    .history-item:last-child { border-bottom: none; }
+    .history-info { flex: 1; }
+    .history-info span { font-size: 0.9rem; font-weight: 600; display: block; }
+    .history-info small { opacity: 0.3; font-size: 0.75rem; }
+    .history-actions { display: flex; align-items: center; gap: 12px; }
+    .history-weight { color: var(--danger); font-weight: 800; font-size: 0.9rem; margin-right: 5px; }
+    .history-price { color: var(--success); font-size: 0.75rem; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 6px; margin-right: 5px;}
+    
+    .btn-hist-action { color: #4b5563; cursor: pointer; padding: 5px; transition: 0.2s; display: flex; align-items: center; }
+    .btn-hist-action:hover.edit { color: var(--accent); }
+    .btn-hist-action:hover.del { color: var(--danger); }
+
+    #detail-view { display: none; }
+
+    /* TRANSITION DASHBOARD */
+    #main-view, #detail-view {transition: opacity 0.15s ease; opacity: 1;}
+    .fade-out {opacity: 0 !important;}
+
+    /* CLOUD UI */
+    .cloud-status-box { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 0.8rem; opacity: 0.9; min-height: 18px; line-height: 1.4; }
+    .cloud-status-box.ok { color: var(--success); }
+    .cloud-status-box.err { color: var(--danger); }
+    .folder-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
+    .folder-item { display: flex; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: 600; }
+    .folder-item:hover { border-color: var(--accent); }
+    .folder-path { font-size: 0.75rem; font-weight: 800; color: var(--accent); text-align: center; word-break: break-all; }
+    .backup-item { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: 0.2s; }
+    .backup-item:hover { border-color: var(--accent); }
+    .backup-item span { font-size: 0.8rem; font-weight: 700; }
+    .backup-item small { opacity: 0.4; font-size: 0.7rem; }
+
+</style>
+</head>
+<body>
+
+    <header>
+        <h1 class="app-title"><span class="logo-wrap"><i data-lucide="database" style="width:20px;height:20px"></i></span>LTF Spool Manager
+        <span id="cloud-indicator" class="cloud-indicator" hidden title=""><i data-lucide="cloud" style="width:14px;height:14px"></i></span>
+        </h1>
+    </header>
+
+    <img src="images/printer.png" class="bkg-img" alt="Background printer" style="bottom:1rem; left:1rem; width:20vw;">
+    <img src="images/spool.png" class="bkg-img" alt="Background spool" style="top:1rem; right:1rem; width:10vw;">
+
+    <div class="container">
+        <div id="main-view">
+            <h3 style="margin-bottom: 1.5rem; opacity: 0.7;">Spool Inventory</h3>
+            <div id="dashboard"></div>
+        </div>
+
+        <div id="detail-view">
+            <button class="btn btn-outline" style="margin-bottom:20px" onclick="showDashboard()">
+                <i data-lucide="arrow-big-left" style="width:18px"></i> Dashboard
+            </button>
+            <div id="detail-info"></div>
+            <div class="section-label" style="margin-bottom:8px; font-size:1rem; line-height:1;"> <i data-lucide="history" style="display:inline-block; vertical-align:-0.12em; font-size:1em; width:1em; height:1em;"></i> Print History </div>
+            <div id="history-container" style="background:var(--card); border-radius:16px; padding:5px; border:1px solid var(--border)"></div>
+        </div>
+    </div>
+
+    <div class="fab-stack">
+    <button class="fab-add" data-label="Add Spool" onclick="handleMasterAction()">
+        <i data-lucide="plus"></i>
+    </button>
+    
+    <div class="settings-group">
+        <button class="fab-settings" id="settings-btn" data-label="Settings" onclick="toggleSettings()">
+            <i data-lucide="settings"></i>
+        </button>
+        <div class="settings-subs" id="settings-subs">
+            </div>
+    </div>
+</div>
+    <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+
+    <div id="modal-spool" class="modal">
+        <div class="modal-content">
+            <div class="close-modal" onclick="closeModal('modal-spool')"><i data-lucide="x"></i></div>
+            <h4 id="modal-spool-title" style="margin:0">New Spool</h4>
+            <div class="section-label">Material, Brand & Price</div>
+            <div class="row">
+                <select id="spool-material"><option>PLA</option><option>PLA+</option><option>PLA Rapid</option><option>PETG</option><option>PETG HF</option><option>TPU</option><option>ABS</option></select>
+                <input type="text" id="spool-brand" placeholder="Brand">
+                <input type="number" id="spool-price" placeholder="Spool Price (€$)" step="0.01">
+            </div>
+            <div class="section-label">Weight</div>
+            <div class="weight-row">
+                <div class="chip" onclick="setWeight(250, this)">250g</div>
+                <div class="chip" onclick="setWeight(500, this)">500g</div>
+                <div class="chip active" onclick="setWeight(1000, this)">1kg</div> <input type="number" id="spool-weight-custom" class="input-custom-weight" placeholder="Custom (g)" oninput="clearChips()">
+            </div>
+            <div class="section-label">Color</div>
+            <div class="picker-area">
+                <div class="color-presets">
+                    <div class="preset-dot active" style="background:#000000" onclick="setPreset('#000000', this)"></div>
+                    <div class="preset-dot" style="background:#545454" onclick="setPreset('#545454', this)"></div>
+                    <div class="preset-dot" style="background:#ffffff" onclick="setPreset('#ffffff', this)"></div>
+                    <div class="preset-dot" style="background:#0055b8" onclick="setPreset('#0055b8', this)"></div>
+                    <div class="preset-dot" style="background:#00b946" onclick="setPreset('#00b946', this)"></div>
+                    <div class="preset-dot" style="background:#ed6c21" onclick="setPreset('#ed6c21', this)"></div>
+                    <div class="preset-dot" style="background:#c12e1f" onclick="setPreset('#c12e1f', this)"></div>
+                </div>
+                <div class="hue-container" onmousedown="startDragH(event)" ontouchstart="startDragH(event)"><div class="hue-strip"></div><div id="hue-cursor" class="hue-cursor"></div></div>
+                <div class="sv-map" id="sv-map" onmousedown="startDragSV(event)" ontouchstart="startDragSV(event)"><div id="sv-cursor" class="sv-cursor"></div></div>
+                <input type="text" id="final-preview" class="preview-box" 
+                    style="text-align: center; border: none; width: 100%; cursor: text;" 
+                    onchange="handleHexInput(this.value)">
+            </div>
+            <button class="btn btn-success" onclick="saveSpool()"><i data-lucide="save"></i> Save</button>
+        </div>
+    </div>
+
+    <div id="modal-print" class="modal">
+        <div class="modal-content">
+            <div class="close-modal" onclick="closeModal('modal-print')"><i data-lucide="x"></i></div>
+            <h4 style="margin:0">Add Print Job</h4>
+            <div class="section-label">Details</div>
+            <input type="number" id="print-weight" placeholder="Print Weight (g)">
+            <input type="text" id="print-description" placeholder="Description" style="text-transform: uppercase;">
+            <button class="btn btn-success" onclick="addPrint()"><i data-lucide="diamond-plus"></i> Add</button>
+        </div>
+    </div>
+
+    <div id="modal-edit-print" class="modal">
+        <div class="modal-content">
+            <div class="close-modal" onclick="closeModal('modal-edit-print')"><i data-lucide="x"></i></div>
+            <h4 style="margin:0">Edit Print Job</h4>
+            <div class="section-label">Print Job Data</div>
+            <input type="number" id="edit-print-weight" placeholder="Weight (g)">
+            <input type="text" id="edit-print-description" placeholder="PROJECT" style="text-transform: uppercase;">
+            <button class="btn btn-success" onclick="confirmEditPrint()"><i data-lucide="save"></i> Update</button>
+        </div>
+    </div>
+
+    <div id="modal-cloud" class="modal">
+        <div class="modal-content">
+            <div class="close-modal" onclick="closeModal('modal-cloud')"><i data-lucide="x"></i></div>
+            <h4 style="margin:0">Cloud Backup</h4>
+            <div class="section-label">Nextcloud WebDAV</div>
+            <input type="url" id="cloud-server" placeholder="https://cloud.example.com">
+            <div class="row">
+                <input type="text" id="cloud-username" placeholder="Username">
+                <input type="password" id="cloud-password" placeholder="App password">
+            </div>
+            <div class="section-label">Backup folder</div>
+            <div class="row">
+                <input type="text" id="cloud-folder" placeholder="Folder path (e.g. SpoolBackups)" value="">
+                <button class="btn btn-outline" style="white-space:nowrap" onclick="openFolderPicker()"><i data-lucide="folder-open" style="width:16px"></i> Browse</button>
+            </div>
+            <div class="cloud-status-box" id="cloud-status">Not configured yet.</div>
+            <div class="row">
+                <button class="btn btn-outline" onclick="testCloudConnection()"><i data-lucide="plug-zap" style="width:16px"></i> Test</button>
+                <button class="btn btn-outline" onclick="cloudBackupNow()"><i data-lucide="cloud-upload" style="width:16px"></i> Backup now</button>
+            </div>
+            <button class="btn btn-outline" onclick="openRestoreModal()"><i data-lucide="cloud-download" style="width:16px"></i> Restore from cloud...</button>
+            <button class="btn btn-success" onclick="saveCloudSettings()"><i data-lucide="save"></i> Save settings</button>
+        </div>
+    </div>
+
+    <div id="modal-cloud-picker" class="modal">
+        <div class="modal-content">
+            <div class="close-modal" onclick="closeModal('modal-cloud-picker')"><i data-lucide="x"></i></div>
+            <h4 style="margin:0">Select Backup Folder</h4>
+            <div class="folder-path" id="picker-path">/</div>
+            <div class="folder-list" id="picker-list"><div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Loading...</div></div>
+            <div class="row" style="margin-top:6px">
+                <input type="text" id="picker-new-folder" placeholder="New folder name" onkeydown="if(event.key==='Enter'){event.stopPropagation();createPickerFolder();}">
+                <button class="btn btn-outline" style="white-space:nowrap" onclick="createPickerFolder()"><i data-lucide="folder-plus" style="width:16px"></i> Create</button>
+            </div>
+            <div class="row">
+                <button class="btn btn-outline" id="picker-back-btn" onclick="pickerGoParent()" style="white-space:nowrap"><i data-lucide="arrow-big-left" style="width:16px"></i> Back</button>
+                <button class="btn btn-success" onclick="pickerSelectFolder()"><i data-lucide="check" style="width:16px"></i> Use this folder</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-cloud-restore" class="modal">
+        <div class="modal-content">
+            <div class="close-modal" onclick="closeModal('modal-cloud-restore')"><i data-lucide="x"></i></div>
+            <h4 style="margin:0">Restore From Cloud</h4>
+            <div class="section-label">Saved backups (newest first)</div>
+            <div class="folder-list" id="restore-list" style="min-height:80px"><div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Loading...</div></div>
+        </div>
+    </div>
+
+    <div id="modal-confirm" class="modal">
+    <div class="modal-content" style="text-align: center; gap: 20px;">
+        <div id="confirm-icon" style="margin-bottom: 10px;">
+            <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--danger);"></i>
+        </div>
+        <h4 id="confirm-title" style="margin:0; font-size: 1.2rem;">Confirm</h4>
+        <p id="confirm-msg" style="margin:0; opacity: 0.7; font-size: 0.9rem;">This action cannot be undone</p>
+        <div class="row" style="margin-top: 10px;">
+            <button class="btn btn-outline" onclick="closeModal('modal-confirm')">Cancel</button>
+            <button id="confirm-btn-exec" class="btn" style="background: var(--danger); color: white;">Confirm</button>
+        </div>
+    </div>
+    </div>  
+
+    <script>
+// --- DATA LAYER ---
+const STORAGE_KEY = 'LTF_Spool_Manager_DB';
+const CLOUD_KEY = 'LTF_Spool_Manager_Cloud';
+const CLOUD_LAST_KEY = 'LTF_Spool_Manager_Cloud_Last';
+
+// Migrates old (Italian-keyed) records to the current English schema, so no data is lost.
+function migrateData(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map(s => {
+        const isOld = ('pesoAttuale' in s) || ('materiale' in s) || ('stampe' in s) || ('colore' in s);
+        if (!isOld) return s;
+        return {
+            material: s.materiale || s.material || 'PLA',
+            brand: String(s.marca || s.brand || 'GENERIC').toUpperCase(),
+            initialWeight: Number(s.pesoIniziale || s.initialWeight || 1000),
+            currentWeight: Number(s.pesoAttuale || s.currentWeight || 1000),
+            color: s.colore || s.color || '#000000',
+            price: Number(s.prezzo || s.price || 0),
+            lastUsed: Number(s.lastUsed || 0),
+            prints: (s.stampe || s.prints || []).map(p => ({
+                weight: Number(p.peso || p.weight || 0),
+                description: String(p.desc || p.description || 'PRINT').toUpperCase(),
+                date: p.date || ''
+            }))
+        };
+    });
+}
+
+let spools = [];
+try {
+    spools = migrateData(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(spools));
+} catch (e) {
+    spools = [];
+}
+
+let activeIndex = null, editingPrintIdx = null, isDetailMode = false, isEditMode = false;
+let selectedWeight = 1000; // Defaults to 1000g
+let state = { h: 0, s: 0, v: 0, color: '#000000' };
+
+// --- CLOUD BACKUP STATE ---
+let cloud = {};
+try { cloud = JSON.parse(localStorage.getItem(CLOUD_KEY) || '{}'); } catch (e) { cloud = {}; }
+let lastCloudBackup = localStorage.getItem(CLOUD_LAST_KEY) || '';
+
+lucide.createIcons();
+
+// --- KEYBOARD AND OUTSIDE-CLICK HANDLING ---
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const activeModal = document.querySelector('.modal[style*="display: flex"]');
+        if (activeModal) {
+            const confirmBtn = activeModal.querySelector('.btn-success, #confirm-btn-exec');
+            if (confirmBtn) confirmBtn.click();
+        }
+    }
+    if (e.key === 'Escape') {
+        const activeModal = document.querySelector('.modal[style*="display: flex"]');
+        if (activeModal) closeModal(activeModal.id);
+    }
+});
+
+window.addEventListener('mousedown', (e) => {
+    if (e.target.classList.contains('modal')) {
+        closeModal(e.target.id);
+    }
+    
+    // Closes the FAB settings menu when clicking outside the settings group
+    if (!e.target.closest('.settings-group')) {
+        closeSettingsMenu();
+    }
+});
+
+// --- NAVIGATION AND HISTORY (MOUSE BACK BUTTON) ---
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.view === 'detail') {
+        renderDetail(e.state.index);
+    } else {
+        execShowDashboard(true);
+    }
+});
+
+function showDetail(i) {
+    const newState = { view: 'detail', index: i };
+    if (window.history.state && window.history.state.view === 'detail') {
+        history.replaceState(newState, "");
+    } else {
+        history.pushState(newState, "");
+    }
+    renderDetail(i);
+}
+
+function renderDetail(i) {
+    // 1. Closes the settings menu if it is still open
+    closeSettingsMenu();
+
+    const mainView = document.getElementById('main-view');
+    const detailView = document.getElementById('detail-view');
+    
+    // Dashboard exit animation
+    mainView.classList.add('fade-out');
+
+    setTimeout(() => {
+        mainView.style.display = 'none';
+        detailView.style.display = 'block';
+        detailView.classList.add('fade-out');
+        
+        activeIndex = i; 
+        isDetailMode = true; 
+        const s = spools[i];
+        
+        // Percentage for the progress bar (minimum 0 to keep the layout intact)
+        const perc = Math.max(0, (s.currentWeight / s.initialWeight) * 100);
+        
+        // Red weight text if the weight went negative
+        const weightColorStyle = s.currentWeight < 0 ? 'color: var(--danger);' : '';
+
+        document.getElementById('detail-info').innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+                <div style="width:20px; height:20px; border-radius:50%; background:${s.color}; border:2px solid white"></div>
+                <h2 style="margin:0">${s.material}</h2>
+            </div>
+            
+            <div class="compact-info-row" style="flex-direction: column; align-items: stretch; gap: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <small style="opacity:0.5; font-size:0.6rem; font-weight:800">Brand & Price</small>
+                        <div style="font-weight:700">${s.brand} (${s.price || 0}€$)</div>
+                    </div>
+                    <div style="text-align:right">
+                        <small style="opacity:0.5; font-size:0.6rem; font-weight:800">Remaining</small>
+                        <h1 style="margin:0; ${weightColorStyle}">
+                            ${s.currentWeight}<small style="font-size:1rem;">g</small>
+                            <span style="opacity:0.6; color: var(--text)"> / ${s.initialWeight}</span>
+                            <small style="font-size:1rem; opacity:0.6; color: var(--text)">g</small>
+                        </h1>
+                    </div>
+                </div>
+
+                <div style="width: 100%;">
+                    <div class="progress-bar" style="height: 12px; background: rgba(0,0,0,0.4);">
+                        <div class="progress-fill" style="width: ${perc}%; background: ${s.color}; box-shadow: 0 0 10px ${s.color}44;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.7rem; font-weight: 700; opacity: 0.6;">
+                        <span>0g</span>
+                        <span>${Math.round(perc)}% available</span>
+                        <span>${s.initialWeight}g</span>
+                    </div>
+                </div>
+            </div>`;
+        
+        // Updates the FAB button label
+        document.querySelector('.fab-add').setAttribute('data-label', 'Add Print Job');
+        
+        // Loads the print history
+        renderHistory(s);
+
+        // Detail entrance animation
+        setTimeout(() => {
+            detailView.classList.remove('fade-out');
+            mainView.classList.remove('fade-out');
+        }, 50);
+    }, 200);
+}
+
+function renderHistory(s) {
+    const container = document.getElementById('history-container');
+    container.innerHTML = '';
+
+    if(!s.prints || s.prints.length === 0) {
+        container.innerHTML = '<div style="padding:20px; opacity:0.3; text-align:center">No prints recorded</div>';
+        return;
+    }
+
+    const costPerGram = s.price ? (s.price / s.initialWeight) : 0;
+
+    // --- PROGRESSIVE COST CALCULATION ---
+    // Start from the initial weight and subtract prints in CHRONOLOGICAL order (not reversed)
+    // to determine which grams were "paid" and which were "free".
+    let progressiveRemaining = s.initialWeight;
+
+    // Build a map of correctly calculated costs
+    const calculatedCosts = s.prints.map(p => {
+        let paidGrams = 0;
+        
+        if (progressiveRemaining > 0) {
+            // If weight is still available, calculate how much of this print is paid
+            paidGrams = Math.min(p.weight, progressiveRemaining);
+        } else {
+            // If the remaining weight was already <= 0, the whole print is free
+            paidGrams = 0;
+        }
+
+        progressiveRemaining -= p.weight;
+        return (paidGrams * costPerGram).toFixed(2);
+    });
+
+    // Now render the list (reversed to show the latest prints on top)
+    s.prints.slice().reverse().forEach((p, idx) => {
+        const originalIdx = s.prints.length - 1 - idx;
+        const printCost = calculatedCosts[originalIdx]; // Use the pre-calculated cost
+        
+        const negativeStyle = s.currentWeight < 0 ? 'color: var(--danger); font-weight: 800;' : '';
+
+        container.innerHTML += `
+            <div class="history-item">
+                <div class="history-info">
+                    <span style="text-transform: uppercase;">${p.description}</span>
+                    <small>${p.date}</small>
+                </div>
+                <div class="history-actions">
+                    <span class="history-price">${printCost}€$</span>
+                    <span class="history-weight" style="${negativeStyle}">-${p.weight}g</span>
+                    <div class="btn-hist-action edit" onclick="openEditPrint(${originalIdx})">
+                        <i data-lucide="pencil" style="width:16px"></i>
+                    </div>
+                    <div class="btn-hist-action del" onclick="deletePrint(${originalIdx})">
+                        <i data-lucide="trash-2" style="width:16px"></i>
+                    </div>
+                </div>
+            </div>`;
+    });
+
+    lucide.createIcons({root: container});
+}
+
+function showDashboard() {
+    if (window.history.state && window.history.state.view === 'detail') {
+        history.back();
+    } else {
+        execShowDashboard();
+    }
+}
+
+function execShowDashboard(fromPopState = false) {
+    closeSettingsMenu(); 
+    const mainView = document.getElementById('main-view');
+    const detailView = document.getElementById('detail-view');
+    isDetailMode = false;
+    detailView.classList.add('fade-out');
+    setTimeout(() => {
+        detailView.style.display = 'none';
+        mainView.style.display = 'block';
+        mainView.classList.add('fade-out');
+        document.querySelector('.fab-add').setAttribute('data-label', 'Add Spool');
+        renderDashboard();
+        setTimeout(() => {
+            mainView.classList.remove('fade-out');
+            detailView.classList.remove('fade-out');
+        }, 50);
+    }, 200);
+}
+
+function closeSettingsMenu() {
+    const btn = document.getElementById('settings-btn');
+    const subs = document.getElementById('settings-subs');
+    if (btn && subs) {
+        btn.classList.remove('active');
+        subs.classList.remove('show');
+        btn.setAttribute('data-label', 'Settings');
+    }
+}
+
+// --- CORE FUNCTIONS ---
+function handleMasterAction() { if(isDetailMode) openModal('modal-print'); else { isEditMode = false; openModal('modal-spool'); resetSpoolForm(); } }
+
+function toggleSettings() { 
+    const btn = document.getElementById('settings-btn');
+    const subs = document.getElementById('settings-subs');
+    btn.classList.toggle('active'); 
+    const isOpen = btn.classList.contains('active');
+    subs.classList.toggle('show', isOpen);
+    if(isOpen) {
+        if(isDetailMode) {
+            subs.innerHTML = `<button class="fab-mini" data-label="Delete Spool" style="color:var(--danger)" onclick="deleteActiveSpool()"><i data-lucide="trash-2"></i></button><button class="fab-mini" data-label="Edit Spool" onclick="openEditSpool()"><i data-lucide="square-pen"></i></button>`;
+        } else {
+            subs.innerHTML = `<button class="fab-mini" data-label="Cloud Backup" onclick="openCloudModal()"><i data-lucide="cloud"></i></button><button class="fab-mini" data-label="Reset DB" style="color:var(--danger)" onclick="resetMemory()"><i data-lucide="trash-2"></i></button><button class="fab-mini" data-label="Import DB" onclick="document.getElementById('importFile').click()"><i data-lucide="upload"></i></button><button class="fab-mini" data-label="Export DB" onclick="exportData()"><i data-lucide="download"></i></button>`;
+        }
+        lucide.createIcons({ root: subs });
+    }
+    btn.setAttribute('data-label', isOpen ? 'Close settings' : 'Settings');
+}
+
+// --- COLOR PICKER ---
+let draggingH = false, draggingSV = false;
+function startDragH(e) { draggingH = true; handleH(e); }
+function startDragSV(e) { draggingSV = true; handleSV(e); }
+function handleH(e) {
+    const container = document.querySelector('.hue-container'); const rect = container.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+    let x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    state.h = Math.round((x / rect.width) * 360);
+    document.getElementById('hue-cursor').style.left = x + 'px';
+    document.getElementById('sv-map').style.backgroundColor = `hsl(${state.h}, 100%, 50%)`;
+    calculateFinal();
+}
+function handleSV(e) {
+    const container = document.getElementById('sv-map'); const rect = container.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+    const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+    let x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    let y = Math.max(0, Math.min(clientY - rect.top, rect.height));
+    state.s = Math.round((x / rect.width) * 100);
+    state.v = Math.round(100 - (y / rect.height) * 100);
+    document.getElementById('sv-cursor').style.left = x + 'px'; document.getElementById('sv-cursor').style.top = y + 'px';
+    calculateFinal();
+}
+function calculateFinal() {
+    const l = (state.v / 100) * (1 - (state.s / 100) / 2);
+    const sHSL = (l === 0 || l === 1) ? 0 : ((state.v / 100) - l) / Math.min(l, 1 - l);
+    state.color = `hsl(${state.h}, ${Math.round(sHSL * 100)}%, ${Math.round(l * 100)}%)`;
+    updatePreview();
+}
+function updatePreview() { 
+    const p = document.getElementById('final-preview'); 
+    const hexColor = hslToHex(state.color);
+    p.value = hexColor.toUpperCase(); 
+    p.style.backgroundColor = state.color; 
+    p.style.color = (state.v > 60 && state.s < 40) ? '#000' : '#fff'; 
+}
+
+// Handles manual HEX input
+function handleHexInput(hex) {
+    // Validates the HEX format (#RRGGBB)
+    if (/^#[0-9A-F]{6}$/i.test(hex)) {
+        state.color = hex;
+        
+        // 1. Convert HEX to RGB values
+        let r = parseInt(hex.slice(1, 3), 16);
+        let g = parseInt(hex.slice(3, 5), 16);
+        let b = parseInt(hex.slice(5, 7), 16);
+
+        // 2. Convert RGB to HSV for the cursors
+        let r_n = r / 255, g_n = g / 255, b_n = b / 255;
+        let max = Math.max(r_n, g_n, b_n), min = Math.min(r_n, g_n, b_n);
+        let h, s, v = max;
+        let d = max - min;
+        s = max === 0 ? 0 : d / max;
+
+        if (max === min) {
+            h = 0; // achromatic
+        } else {
+            switch (max) {
+                case r_n: h = (g_n - b_n) / d + (g_n < b_n ? 6 : 0); break;
+                case g_n: h = (b_n - r_n) / d + 2; break;
+                case b_n: h = (r_n - g_n) / d + 4; break;
+            }
+            h /= 6;
+        }
+
+        // 3. Update the global state (converted to degrees and percentages)
+        state.h = Math.round(h * 360);
+        state.s = Math.round(s * 100);
+        state.v = Math.round(v * 100);
+
+        // 4. Reposition the cursors physically
+        updateCursorPositions();
+        
+        // 5. Update the preview (color and text contrast)
+        updatePreview();
+    }
+}
+function updateCursorPositions() {
+    // Reposition the HUE cursor
+    const hueContainer = document.querySelector('.hue-container');
+    const hueRect = hueContainer.getBoundingClientRect();
+    const hueX = (state.h / 360) * hueRect.width;
+    document.getElementById('hue-cursor').style.left = hueX + 'px';
+    
+    // Update the SV map background color
+    document.getElementById('sv-map').style.backgroundColor = `hsl(${state.h}, 100%, 50%)`;
+
+    // Reposition the SV cursor
+    const svMap = document.getElementById('sv-map');
+    const svRect = svMap.getBoundingClientRect();
+    const svX = (state.s / 100) * svRect.width;
+    const svY = (1 - (state.v / 100)) * svRect.height;
+    
+    document.getElementById('sv-cursor').style.left = svX + 'px';
+    document.getElementById('sv-cursor').style.top = svY + 'px';
+}
+
+// Utility to convert an HSL string to HEX
+function hslToHex(hslStr) {
+    if (hslStr.startsWith('#')) return hslStr;
+    
+    let sep = hslStr.indexOf(",") > -1 ? "," : " ";
+    let hsl = hslStr.substr(4).split(")")[0].split(sep);
+    let h = hsl[0], s = hsl[1].substr(0,hsl[1].length - 1) / 100, l = hsl[2].substr(0,hsl[2].length - 1) / 100;
+
+    let a = s * Math.min(l, 1 - l);
+    let f = (n, k = (n + h / 30) % 12) => l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return `#${Math.round(255 * f(0)).toString(16).padStart(2, '0')}${Math.round(255 * f(8)).toString(16).padStart(2, '0')}${Math.round(255 * f(4)).toString(16).padStart(2, '0')}`;
+}
+
+window.addEventListener('mousemove', (e) => { if(draggingH) handleH(e); if(draggingSV) handleSV(e); });
+window.addEventListener('touchmove', (e) => { if(draggingH) handleH(e); if(draggingSV) handleSV(e); }, {passive:false});
+window.addEventListener('mouseup', () => { draggingH = false; draggingSV = false; });
+window.addEventListener('touchend', () => { draggingH = false; draggingSV = false; });
+
+// --- CRUD & LOGIC ---
+function setWeight(val, el) { selectedWeight = val; document.querySelectorAll('.chip').forEach(c => c.classList.remove('active')); if(el) el.classList.add('active'); document.getElementById('spool-weight-custom').value = ''; }
+function clearChips() { selectedWeight = null; document.querySelectorAll('.chip').forEach(c => c.classList.remove('active')); }
+function setPreset(hex, el) { 
+    document.querySelectorAll('.preset-dot').forEach(d => d.classList.remove('active')); 
+    if(el) el.classList.add('active'); 
+    
+    // Use the shared logic to sync everything starting from the preset HEX
+    handleHexInput(hex); 
+}
+function resetSpoolForm() {
+    document.getElementById('modal-spool-title').innerText = "New Spool";
+    document.getElementById('spool-material').value = 'PLA';
+    document.getElementById('spool-brand').value = '';
+    document.getElementById('spool-price').value = '';
+    document.getElementById('spool-weight-custom').value = '';
+    
+    // Reset weight (1kg default)
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    selectedWeight = 1000;
+    const chips = document.querySelectorAll('.chip');
+    chips.forEach(chip => { if(chip.innerText === '1kg') chip.classList.add('active'); });
+
+    // --- RESET COLOR TO BLACK ---
+    state = { h: 0, s: 0, v: 0, color: '#000000' };
+    
+    // Position the cursors graphically
+    document.getElementById('hue-cursor').style.left = '0px';
+    document.getElementById('sv-cursor').style.left = '0px';
+    document.getElementById('sv-cursor').style.top = '100%'; // Bottom = Black
+    document.getElementById('sv-map').style.backgroundColor = `hsl(0, 100%, 50%)`;
+    
+    // Highlight the black preset if present
+    document.querySelectorAll('.preset-dot').forEach(d => d.classList.remove('active'));
+    const blackPreset = document.querySelector('.preset-dot[style*="#000000"]');
+    if(blackPreset) blackPreset.classList.add('active');
+    
+    updatePreview();
+}
+
+function openEditSpool() {
+    isEditMode = true; const s = spools[activeIndex]; toggleSettings();
+    document.getElementById('modal-spool-title').innerText = "Edit Spool";
+    document.getElementById('spool-material').value = s.material; document.getElementById('spool-brand').value = s.brand;
+    document.getElementById('spool-price').value = s.price || '';
+    document.getElementById('spool-weight-custom').value = s.initialWeight;
+    state.color = s.color; clearChips(); openModal('modal-spool'); updatePreview();
+}
+
+function saveSpool() {
+    const p = selectedWeight || Number(document.getElementById('spool-weight-custom').value);
+    const price = parseFloat(document.getElementById('spool-price').value) || 0;
+    if(!p) return;
+    const mat = document.getElementById('spool-material').value;
+    const brand = document.getElementById('spool-brand').value.toUpperCase() || 'GENERIC';
+    if(isEditMode) {
+        const s = spools[activeIndex]; const consumed = s.initialWeight - s.currentWeight;
+        s.material = mat; s.brand = brand; s.initialWeight = p; s.currentWeight = p - consumed; s.color = state.color; s.price = price;
+    } else {
+        spools.push({ material: mat, brand: brand, initialWeight: p, currentWeight: p, color: state.color, price: price, prints: [], lastUsed: Date.now() });
+    }
+    save(); closeModal('modal-spool'); isEditMode ? renderDetail(activeIndex) : renderDashboard();
+}
+
+function addPrint() {
+    const p = Number(document.getElementById('print-weight').value); 
+    const d = document.getElementById('print-description').value.toUpperCase() || 'Generic Print Job';
+    if(p > 0) { 
+        spools[activeIndex].currentWeight -= p; 
+        spools[activeIndex].lastUsed = Date.now(); 
+        const formattedDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        spools[activeIndex].prints.push({ weight: p, description: d, date: formattedDate }); 
+        save(); closeModal('modal-print'); renderDetail(activeIndex); 
+        document.getElementById('print-weight').value = ''; document.getElementById('print-description').value = '';
+    }
+}
+
+function openEditPrint(idx) { editingPrintIdx = idx; const p = spools[activeIndex].prints[idx]; document.getElementById('edit-print-weight').value = p.weight; document.getElementById('edit-print-description').value = p.description; openModal('modal-edit-print'); }
+function confirmEditPrint() {
+    const s = spools[activeIndex]; const p = s.prints[editingPrintIdx]; const newW = Number(document.getElementById('edit-print-weight').value);
+    s.currentWeight = s.currentWeight + p.weight - newW; p.weight = newW; p.description = document.getElementById('edit-print-description').value.toUpperCase();
+    save(); closeModal('modal-edit-print'); renderDetail(activeIndex);
+}
+
+// --- CONFIRMATION MODALS ---
+function askConfirmation(title, msg, actionFn) {
+    document.getElementById('confirm-title').innerText = title;
+    document.getElementById('confirm-msg').innerText = msg;
+    const btn = document.getElementById('confirm-btn-exec');
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.onclick = () => { actionFn(); closeModal('modal-confirm'); };
+    openModal('modal-confirm');
+}
+
+function deletePrint(idx) { askConfirmation("Delete Print", "This action cannot be undone. Proceed?", () => { spools[activeIndex].currentWeight += spools[activeIndex].prints[idx].weight; spools[activeIndex].prints.splice(idx, 1); save(); renderDetail(activeIndex); }); }
+function deleteActiveSpool() { askConfirmation("Delete Spool", "This action cannot be undone. Proceed?", () => { spools.splice(activeIndex, 1); save(); if(document.getElementById('settings-subs').classList.contains('show')) toggleSettings(); showDashboard(); }); }
+function resetMemory() { askConfirmation("Reset Database", "This action cannot be undone. Proceed?", () => { spools = []; save(); renderDashboard(); if(document.getElementById('settings-subs').classList.contains('show')) toggleSettings(); }); }
+
+// --- UTILS ---
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(spools)); }
+function openModal(id) {
+    const modal = document.getElementById(id);
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+    lucide.createIcons();
+}
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    modal.classList.remove('show');
+    setTimeout(() => { if(!modal.classList.contains('show')) modal.style.display = 'none'; }, 200);
+}
+function exportData() { const blob = new Blob([JSON.stringify(spools)], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "LTF_Spool_Manager_DB.json"; a.click(); toggleSettings(); }
+function importData(e) { const r = new FileReader(); r.onload = (ev) => { try { spools = migrateData(JSON.parse(ev.target.result)); save(); renderDashboard(); } catch(err){ alert("Import failed: invalid file"); } }; r.readAsText(e.target.files[0]); toggleSettings(); }
+
+function renderDashboard() {
+    const grid = document.getElementById('dashboard'); 
+    grid.innerHTML = spools.length ? '' : `<div style="grid-column: 1/-1; text-align:center; padding: 40px; opacity:0.3"><i data-lucide="package-search" style="width:48px; height:48px; margin-bottom:10px"></i><p>Nothing to see here yet.<br>Use the + button to add a new spool.</p></div>`;
+    const sortedSpools = spools.map((s, index) => ({ ...s, originalIndex: index })).sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
+    
+    sortedSpools.forEach((s) => {
+        const perc = Math.max(0, (s.currentWeight / s.initialWeight) * 100);
+        // Red weight text if negative, otherwise inherited (white)
+        const weightColor = s.currentWeight < 0 ? 'var(--danger)' : 'inherit';
+
+        grid.innerHTML += `
+            <div class="card" onclick="showDetail(${s.originalIndex})" style="--glow-color: ${s.color}">
+                <div class="card-header">
+                    <div><div class="card-brand">${s.brand}</div><div class="card-title">${s.material}</div></div>
+                    <div class="color-indicator"></div>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" style="width: ${perc}%; background: ${s.color}"></div></div>
+                <div class="card-footer">
+                    <div class="weight-text" style="color: ${weightColor}">${s.currentWeight}g <small style="opacity: 0.3; font-weight: 400; color: var(--text)">/ ${s.initialWeight}g</small></div>
+                    <div style="font-size:0.8rem; font-weight: 800; opacity:0.6">${Math.round(perc)}%</div>
+                </div>
+            </div>`;
+    });
+    lucide.createIcons();
+}
+renderDashboard();
+
+// Navigation history cleanup
+if (window.history.state && window.history.state.view === 'detail') {
+    history.replaceState({ view: 'dashboard' }, "");
+    execShowDashboard(); 
+} else {
+    renderDashboard();
+}
+
+// --- CLOUD BACKUP (NEXTCLOUD WEBDAV) ---
+function base64Encode(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    bytes.forEach(b => bin += String.fromCharCode(b));
+    return btoa(bin);
+}
+function cloudConfigured() { return !!(cloud.server && cloud.username && cloud.password); }
+function davBaseUrl() { return cloud.server.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(cloud.username); }
+function davFileUrl(relPath) {
+    if (!relPath) return davBaseUrl();
+    return davBaseUrl() + '/' + relPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+}
+function davHeaders(extra) {
+    return Object.assign({ 'Authorization': 'Basic ' + base64Encode(cloud.username + ':' + cloud.password) }, extra || {});
+}
+async function davPropfind(relPath, depth) {
+    const res = await fetch(davFileUrl(relPath), {
+        method: 'PROPFIND',
+        headers: davHeaders({ 'Depth': String(depth), 'Content-Type': 'application/xml' }),
+        body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getlastmodified/></d:prop></d:propfind>'
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.text();
+}
+function parseDavListing(xml, baseRel) {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const prefix = davBaseUrl() + '/';
+    const dirs = [], files = [];
+    doc.querySelectorAll('response').forEach(resp => {
+        const hrefEl = resp.querySelector('href');
+        if (!hrefEl) return;
+        let href = hrefEl.textContent.trim();
+        try { href = decodeURIComponent(href); } catch (e) {}
+        let rel = href.indexOf(prefix) === 0 ? href.slice(prefix.length) : href.split('/files/')[1] || '';
+        rel = rel.replace(/\/+$/, '');
+        if (rel === baseRel || rel === '') return; // skip the current folder itself
+        const isDir = !!resp.querySelector('resourcetype collection');
+        const lastmod = resp.querySelector('getlastmodified') ? resp.querySelector('getlastmodified').textContent.trim() : '';
+        if (isDir) dirs.push({ name: rel.split('/').pop(), rel, lastmod });
+        else files.push({ name: rel.split('/').pop(), rel, lastmod });
+    });
+    dirs.sort((a, b) => a.name.localeCompare(b.name));
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    return { dirs, files };
+}
+function dateName(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '.' + m + '.' + day;
+}
+function setCloudStatus(msg, ok) {
+    const box = document.getElementById('cloud-status');
+    if (!box) return;
+    box.classList.toggle('ok', !!ok);
+    box.classList.toggle('err', ok === false);
+    box.innerHTML = msg;
+}
+function updateCloudIndicator() {
+    const el = document.getElementById('cloud-indicator');
+    if (!cloudConfigured()) { el.hidden = true; return; }
+    el.hidden = false;
+    const today = dateName(new Date());
+    const ok = lastCloudBackup === today;
+    el.classList.toggle('off', !ok);
+    el.title = ok
+        ? 'Cloud backup: today (' + lastCloudBackup + ')'
+        : (lastCloudBackup ? 'Cloud backup: ' + lastCloudBackup + ' — daily backup pending' : 'Cloud backup: never');
+}
+function loadCloudSettingsIntoForm() {
+    document.getElementById('cloud-server').value = cloud.server || '';
+    document.getElementById('cloud-username').value = cloud.username || '';
+    document.getElementById('cloud-password').value = cloud.password || '';
+    document.getElementById('cloud-folder').value = cloud.folderPath || '';
+}
+function openCloudModal() {
+    loadCloudSettingsIntoForm();
+    setCloudStatus(cloudConfigured()
+        ? (lastCloudBackup ? 'Last backup: <b>' + lastCloudBackup + '</b>' : 'Configured. No backup yet — press "Backup now".')
+        : 'Not configured. Enter your Nextcloud details and save.', cloudConfigured());
+    toggleSettings();
+    openModal('modal-cloud');
+}
+function saveCloudSettings() {
+    cloud = {
+        server: document.getElementById('cloud-server').value.trim().replace(/\/+$/, ''),
+        username: document.getElementById('cloud-username').value.trim(),
+        password: document.getElementById('cloud-password').value,
+        folderPath: (document.getElementById('cloud-folder').value.trim() || '').replace(/^\/+|\/+$/g, '')
+    };
+    localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
+    setCloudStatus('Settings saved. Testing connection...', true);
+    testCloudConnection();
+    updateCloudIndicator();
+}
+async function testCloudConnection() {
+    if (!cloudConfigured()) { setCloudStatus('Missing server, username or password.', false); return false; }
+    setCloudStatus('Testing connection...', true);
+    try {
+        await davPropfind(cloud.folderPath || '', 0);
+        setCloudStatus('Connected to <b>' + cloud.server + '</b>', true);
+        return true;
+    } catch (err) {
+        setCloudStatus('Connection failed: ' + err.message + '. Check the server URL, credentials and the CORS setting (cors.allowed-domains) in Nextcloud.', false);
+        return false;
+    }
+}
+async function ensureDavFolder(path) {
+    if (!path) return true;
+    let res = await fetch(davFileUrl(path), { method: 'MKCOL', headers: davHeaders() });
+    if (res.status === 201 || res.status === 405) return true;
+    if (res.status === 301 || res.status === 302) {
+        res = await fetch(davFileUrl(path) + '/', { method: 'MKCOL', headers: davHeaders() });
+        return res.status === 201 || res.status === 405 || res.status === 200;
+    }
+    return res.status === 200 || res.status === 204;
+}
+async function uploadBackup() {
+    const today = dateName(new Date());
+    const fileName = today + '_LTF_SpoolManager_DB.json';
+    const target = davFileUrl(cloud.folderPath ? cloud.folderPath + '/' + fileName : fileName);
+    let res = await fetch(target, {
+        method: 'PUT',
+        headers: davHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(spools)
+    });
+    if (res.status === 404 || res.status === 409) {
+        await ensureDavFolder(cloud.folderPath);
+        res = await fetch(target, {
+            method: 'PUT',
+            headers: davHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(spools)
+        });
+    }
+    if (res.ok) {
+        lastCloudBackup = today;
+        localStorage.setItem(CLOUD_LAST_KEY, today);
+        return true;
+    }
+    throw new Error('HTTP ' + res.status);
+}
+async function cloudBackupNow() {
+    if (!cloudConfigured()) { setCloudStatus('Configure the connection first.', false); return; }
+    setCloudStatus('Uploading backup...', true);
+    try {
+        await uploadBackup();
+        setCloudStatus('Backup uploaded: <b>' + lastCloudBackup + '_LTF_SpoolManager_DB.json</b>', true);
+        updateCloudIndicator();
+    } catch (err) {
+        setCloudStatus('Backup failed: ' + err.message, false);
+    }
+}
+// Daily automatic backup: runs once per day on page load
+function autoDailyBackup() {
+    if (!cloudConfigured()) return;
+    if (lastCloudBackup === dateName(new Date())) return;
+    cloudBackupNow();
+}
+
+// --- FOLDER PICKER ---
+let pickerPath = '';
+async function openFolderPicker() {
+    pickerPath = (document.getElementById('cloud-folder').value.trim() || '').replace(/^\/+|\/+$/g, '');
+    document.getElementById('picker-path').innerText = '/' + pickerPath;
+    openModal('modal-cloud-picker');
+    await loadPickerLevel();
+}
+async function loadPickerLevel() {
+    const list = document.getElementById('picker-list');
+    list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Loading...</div>';
+    try {
+        const xml = await davPropfind(pickerPath, 1);
+        const { dirs } = parseDavListing(xml, pickerPath);
+        if (!dirs.length) {
+            list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">No subfolders here</div>';
+        } else {
+            list.innerHTML = '';
+            dirs.forEach(d => {
+                const item = document.createElement('div');
+                item.className = 'folder-item';
+                item.innerHTML = '<i data-lucide="folder" style="width:16px; flex-shrink:0"></i><span>' + d.name + '</span>';
+                item.onclick = () => { pickerPath = d.rel; document.getElementById('picker-path').innerText = '/' + pickerPath; loadPickerLevel(); };
+                list.appendChild(item);
+            });
+            lucide.createIcons({ root: list });
+        }
+    } catch (err) {
+        list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Failed: ' + err.message + '</div>';
+    }
+}
+function pickerGoParent() {
+    pickerPath = pickerPath.split('/').slice(0, -1).join('/');
+    document.getElementById('picker-path').innerText = '/' + pickerPath;
+    loadPickerLevel();
+}
+async function createPickerFolder() {
+    const name = document.getElementById('picker-new-folder').value.trim();
+    if (!name) return;
+    const target = pickerPath ? pickerPath + '/' + name : name;
+    try {
+        await ensureDavFolder(target);
+        document.getElementById('picker-new-folder').value = '';
+        await loadPickerLevel();
+    } catch (err) {
+        alert('Could not create folder: ' + err.message);
+    }
+}
+function pickerSelectFolder() {
+    document.getElementById('cloud-folder').value = pickerPath;
+    closeModal('modal-cloud-picker');
+}
+
+// --- RESTORE FROM CLOUD ---
+async function openRestoreModal() {
+    const list = document.getElementById('restore-list');
+    list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Loading...</div>';
+    openModal('modal-cloud-restore');
+    if (!cloudConfigured()) {
+        list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Configure the connection first.</div>';
+        return;
+    }
+    try {
+        const xml = await davPropfind(cloud.folderPath || '', 1);
+        const { files } = parseDavListing(xml, cloud.folderPath || '');
+        const backups = files
+            .filter(f => /^\d{4}\.\d{2}\.\d{2}_LTF_SpoolManager_DB\.json$/.test(f.name))
+            .sort((a, b) => b.name.localeCompare(a.name));
+        if (!backups.length) {
+            list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">No backups found in the selected folder.</div>';
+            return;
+        }
+        list.innerHTML = '';
+        backups.forEach(b => {
+            const item = document.createElement('div');
+            item.className = 'backup-item';
+            item.innerHTML = '<div><span>' + b.name.replace('_LTF_SpoolManager_DB.json', '') + '</span><br><small>' + (b.lastmod || '') + '</small></div><i data-lucide="download" style="width:16px; opacity:0.6"></i>';
+            item.onclick = () => restoreBackup(b);
+            list.appendChild(item);
+        });
+        lucide.createIcons({ root: list });
+    } catch (err) {
+        list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Failed: ' + err.message + '</div>';
+    }
+}
+async function restoreBackup(backup) {
+    try {
+        const res = await fetch(davFileUrl(backup.rel), { method: 'GET', headers: davHeaders() });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const parsed = migrateData(JSON.parse(await res.text()));
+        askConfirmation("Restore Backup", 'Replace all current data with "' + backup.name + '"?', () => {
+            spools = parsed;
+            save();
+            closeModal('modal-cloud-restore');
+            renderDashboard();
+            updateCloudIndicator();
+        });
+    } catch (err) {
+        alert('Restore failed: ' + err.message);
+    }
+}
+
+updateCloudIndicator();
+autoDailyBackup();
+
+    </script>
+</body>
+</html>
