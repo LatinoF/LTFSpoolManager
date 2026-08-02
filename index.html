@@ -341,6 +341,11 @@ body {
             <h4 style="margin:0">Cloud Backup</h4>
             <div class="section-label">Nextcloud Server</div>
             <input type="url" id="cloud-server" placeholder="https://nextcloud.example.com">
+            <div class="section-label">Permanent password (no login needed)</div>
+            <div class="row">
+                <input type="text" id="cloud-username" placeholder="Username">
+                <input type="password" id="cloud-password" placeholder="App password">
+            </div>
             <div class="row">
                 <button class="btn btn-outline" id="cloud-connect-btn" onclick="connectNextcloud()"><i data-lucide="plug-zap" style="width:16px"></i> Connect with Nextcloud</button>
                 <button class="btn btn-outline" id="cloud-disconnect-btn" onclick="disconnectCloud()" style="display:none"><i data-lucide="unplug" style="width:16px"></i> Disconnect</button>
@@ -1017,24 +1022,31 @@ function base64Encode(str) {
     bytes.forEach(b => bin += String.fromCharCode(b));
     return btoa(bin);
 }
-function cloudConfigured() { return !!(cloud.server && cloud.loginName && cloud.token); }
+function cloudConfigured() { return !!(cloud.server && ((cloud.permanentUser && cloud.permanentPassword) || (cloud.loginName && cloud.token))); }
 function davBaseUrl() {
     if (cloud.webdavUrl) return cloud.webdavUrl.replace(/\/+$/, '');
-    return cloud.server.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(cloud.loginName);
+    return cloud.server.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(cloud.permanentUser || cloud.loginName);
 }
 function davFileUrl(relPath) {
     if (!relPath) return davBaseUrl();
     return davBaseUrl() + '/' + relPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 function davHeaders(extra) {
-    return Object.assign({ 'Authorization': 'Basic ' + base64Encode(cloud.loginName + ':' + cloud.token) }, extra || {});
+    const user = cloud.permanentUser || cloud.loginName;
+    const pass = cloud.permanentPassword || cloud.token;
+    return Object.assign({ 'Authorization': 'Basic ' + base64Encode(user + ':' + pass) }, extra || {});
+}
+function authModeLabel() {
+    if (cloud.permanentUser && cloud.permanentPassword) return 'Connected as <b>' + escapeHtml(cloud.permanentUser) + '</b> via permanent password.';
+    if (cloud.loginName && cloud.token) return 'Connected as <b>' + escapeHtml(cloud.loginName) + '</b> via login.';
+    return null;
 }
 // Fetches a DAV resource with the current token; on 401 the token is stale,
 // so reconnect once (if not attempted yet) and retry with the fresh token.
 async function davFetch(url, options) {
     let opts = Object.assign({}, options, { headers: Object.assign({}, options.headers, davHeaders()) });
     let res = await fetch(url, opts);
-    if (res.status === 401 && cloudConfigured()) {
+    if (res.status === 401 && cloud.loginName && cloud.token) {
         cloud.loginName = '';
         cloud.token = '';
         cloud.webdavUrl = '';
@@ -1126,14 +1138,17 @@ function updateConnectButtons() {
 }
 function loadCloudSettingsIntoForm() {
     document.getElementById('cloud-server').value = cloud.server || '';
+    document.getElementById('cloud-username').value = cloud.permanentUser || '';
+    document.getElementById('cloud-password').value = cloud.permanentPassword || '';
     document.getElementById('cloud-folder').value = cloud.folderPath || '';
     updateConnectButtons();
 }
 function openCloudModal() {
     loadCloudSettingsIntoForm();
-    setCloudStatus(cloudConfigured()
-        ? 'Connected as <b>' + escapeHtml(cloud.loginName) + '</b>' + (lastCloudBackup ? ' — last backup <b>' + lastCloudBackup + '</b>' : ' — no backup yet.')
-        : 'Enter your Nextcloud server URL and press "Connect with Nextcloud".', cloudConfigured());
+    const label = authModeLabel();
+    setCloudStatus(label
+        ? label + (lastCloudBackup ? ' — last backup <b>' + lastCloudBackup + '</b>' : ' — no backup yet.')
+        : 'Add a permanent password (no login needed) or press "Connect with Nextcloud".', cloudConfigured());
     toggleSettings();
     openModal('modal-cloud');
 }
@@ -1144,14 +1159,19 @@ function saveCloudSettings() {
         cloud.loginName = '';
         cloud.token = '';
         cloud.webdavUrl = '';
+        cloud.permanentUser = '';
+        cloud.permanentPassword = '';
     }
     cloud.server = newServer;
     cloud.folderPath = newFolder;
+    cloud.permanentUser = document.getElementById('cloud-username').value.trim();
+    cloud.permanentPassword = document.getElementById('cloud-password').value;
     localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
     updateConnectButtons();
-    setCloudStatus(cloudConfigured()
-        ? 'Settings saved. Connected as <b>' + escapeHtml(cloud.loginName) + '</b>'
-        : 'Settings saved. Press "Connect with Nextcloud" to authenticate.', cloudConfigured());
+    const label = authModeLabel();
+    setCloudStatus(label
+        ? 'Settings saved. ' + label
+        : 'Settings saved. Add a permanent password or press "Connect with Nextcloud" to authenticate.', cloudConfigured());
     updateCloudIndicator();
 }
 function disconnectCloud() {
@@ -1210,7 +1230,7 @@ async function testCloudConnection() {
     setCloudStatus('Testing connection...', true);
     try {
         await davPropfind(cloud.folderPath || '', 0);
-        setCloudStatus('Connected to <b>' + escapeHtml(cloud.server) + '</b> as <b>' + escapeHtml(cloud.loginName) + '</b>', true);
+        setCloudStatus('Connected to <b>' + escapeHtml(cloud.server) + '</b> as <b>' + escapeHtml(cloud.permanentUser || cloud.loginName) + '</b>', true);
         return true;
     } catch (err) {
         setCloudStatus('Connection failed: ' + err.message, false);
