@@ -1,5 +1,8 @@
 # LTF Spool Manager - Changelog
 
+## v1.1.8 - 2026-08-02 (patch)
+- Change: the cloud backup indicator icon is resized to 24px and spaced identically to the logo icon (same 10px flex gap from the title; the extra 8px margin is removed)
+
 ## v1.1.7 - 2026-08-02 (patch)
 - Change: the cloud backup status indicator in the header is now a bare icon — no background, border or box
 - Change: modal buttons got hover effects (green buttons brighten with a soft glow; outline/icon buttons get the accent border and a faint blue tint), eased in/out with a 0.2s transition, without any movement
