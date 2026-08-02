@@ -1,5 +1,14 @@
 # LTF Spool Manager - Changelog
 
+## v1.1.3 - 2026-08-02
+
+**Description:** Fixed folder selection in the Cloud Backup folder picker (and the restore list): WebDAV listing paths were built relative to the wrong prefix, causing a double-username path and HTTP 404 when opening any folder. The DAV base URL now comes from the server-provided webdavUrl of the WebAppPassword login message, the picker falls back to the root with a notice when the typed folder cannot be opened, and the Nextcloud login now opens in a new tab instead of a popup window.
+
+**Type:** patch
+
+**Notes:**
+- No server changes required.
+
 ## v1.1.2 - 2026-08-02
 
 **Description:** Cloud Backup authentication rewritten to the WebAppPassword flow: the app now connects to Nextcloud via a login popup and uses a temporary app password (WebAppPassword Nextcloud app, which also enables the required CORS headers), instead of stored username/password Basic auth, which the browser cannot use cross-origin. Automatic reconnection on token expiry (once per session), legacy stored credentials dropped on load, and the connect/disconnect UI replaces the old credential fields.

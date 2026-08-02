@@ -962,7 +962,10 @@ function base64Encode(str) {
     return btoa(bin);
 }
 function cloudConfigured() { return !!(cloud.server && cloud.loginName && cloud.token); }
-function davBaseUrl() { return cloud.server.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(cloud.loginName); }
+function davBaseUrl() {
+    if (cloud.webdavUrl) return cloud.webdavUrl.replace(/\/+$/, '');
+    return cloud.server.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(cloud.loginName);
+}
 function davFileUrl(relPath) {
     if (!relPath) return davBaseUrl();
     return davBaseUrl() + '/' + relPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
@@ -978,6 +981,7 @@ async function davFetch(url, options) {
     if (res.status === 401 && cloudConfigured()) {
         cloud.loginName = '';
         cloud.token = '';
+        cloud.webdavUrl = '';
         localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
         updateConnectButtons();
         if (!autoReconnectAttempted) {
@@ -1007,14 +1011,20 @@ async function davPropfind(relPath, depth) {
 }
 function parseDavListing(xml, baseRel) {
     const doc = new DOMParser().parseFromString(xml, 'application/xml');
-    const prefix = davBaseUrl() + '/';
+    const davPath = new URL(davBaseUrl()).pathname.replace(/\/+$/, '');
+    const marker = davPath + '/';
     const dirs = [], files = [];
     doc.querySelectorAll('response').forEach(resp => {
         const hrefEl = resp.querySelector('href');
         if (!hrefEl) return;
         let href = hrefEl.textContent.trim();
         try { href = decodeURIComponent(href); } catch (e) {}
-        let rel = href.indexOf(prefix) === 0 ? href.slice(prefix.length) : href.split('/files/')[1] || '';
+        let rel = '';
+        if (href.startsWith(marker)) {
+            rel = href.slice(marker.length);
+        } else if (href.includes('/files/')) {
+            rel = (href.split('/files/')[1] || '').split('/').slice(1).join('/');
+        }
         rel = rel.replace(/\/+$/, '');
         if (rel === baseRel || rel === '') return; // skip the current folder itself
         const isDir = !!resp.querySelector('resourcetype collection');
@@ -1077,6 +1087,7 @@ function saveCloudSettings() {
     if (cloud.server && cloud.server !== newServer) {
         cloud.loginName = '';
         cloud.token = '';
+        cloud.webdavUrl = '';
     }
     cloud.server = newServer;
     cloud.folderPath = newFolder;
@@ -1090,6 +1101,7 @@ function saveCloudSettings() {
 function disconnectCloud() {
     cloud.loginName = '';
     cloud.token = '';
+    cloud.webdavUrl = '';
     localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
     updateConnectButtons();
     setCloudStatus('Disconnected. Press "Connect with Nextcloud" to authenticate.', false);
@@ -1101,7 +1113,7 @@ function connectNextcloud(silent) {
     if (!server) { setCloudStatus('Enter the server URL first.', false); return false; }
     const targetOrigin = window.location.href;
     setCloudStatus('Waiting for the Nextcloud login window — log in there and allow access.', true);
-    oauthWindow = window.open(server + '/index.php/apps/webapppassword?target-origin=' + encodeURIComponent(targetOrigin), 'Nextcloud Login', 'width=420,height=500');
+    oauthWindow = window.open(server + '/index.php/apps/webapppassword?target-origin=' + encodeURIComponent(targetOrigin), '_blank');
     if (!oauthWindow) {
         setCloudStatus('Popup blocked. Allow popups for this page and try again.', false);
         return false;
@@ -1129,6 +1141,7 @@ window.addEventListener('message', (event) => {
     }
     cloud.loginName = data.loginName;
     cloud.token = data.token;
+    if (data.webdavUrl) cloud.webdavUrl = data.webdavUrl;
     localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
     if (oauthWindow) { try { oauthWindow.close(); } catch (e) {} oauthWindow = null; }
     if (connectResolver) { const r = connectResolver; connectResolver = null; r(true); }
@@ -1228,7 +1241,14 @@ async function loadPickerLevel() {
             lucide.createIcons({ root: list });
         }
     } catch (err) {
-        list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Failed: ' + err.message + '</div>';
+        if (pickerPath !== '') {
+            pickerPath = '';
+            document.getElementById('picker-path').innerText = '/';
+            list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Could not open folder — showing root.</div>';
+            loadPickerLevel();
+        } else {
+            list.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:8px; text-align:center">Failed: ' + err.message + '</div>';
+        }
     }
 }
 function pickerGoParent() {
