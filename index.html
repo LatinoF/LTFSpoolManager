@@ -467,6 +467,20 @@ window.addEventListener('keydown', (e) => {
         const activeModal = document.querySelector('.modal[style*="display: flex"]');
         if (activeModal) closeModal(activeModal.id);
     }
+    if (e.key === 'Tab') {
+        const activeModal = document.querySelector('.modal[style*="display: flex"]');
+        if (activeModal) {
+            const focusables = Array.from(activeModal.querySelectorAll('input, select, button'));
+            if (focusables.length) {
+                const idx = focusables.indexOf(document.activeElement);
+                const next = e.shiftKey
+                    ? (idx <= 0 ? focusables.length - 1 : idx - 1)
+                    : (idx === -1 || idx === focusables.length - 1 ? 0 : idx + 1);
+                focusables[next].focus();
+                e.preventDefault();
+            }
+        }
+    }
 });
 
 window.addEventListener('mousedown', (e) => {
@@ -943,6 +957,10 @@ function openModal(id) {
     const modal = document.getElementById(id);
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('show'), 10);
+    setTimeout(() => {
+        const first = modal.querySelector('input, select');
+        if (first) first.focus();
+    }, 150);
     lucide.createIcons();
 }
 function closeModal(id) {

@@ -1,5 +1,9 @@
 # LTF Spool Manager - Changelog
 
+## v1.1.9 - 2026-08-02 (patch)
+- Added: Tab/Shift+Tab now cycles focus between fields and buttons inside open modals (wrapping around instead of leaving the modal)
+- Added: opening a modal focuses its first input field (modals without fields, e.g. confirm, are not focused)
+
 ## v1.1.8 - 2026-08-02 (patch)
 - Change: the cloud backup indicator icon is resized to 24px and spaced identically to the logo icon (same 10px flex gap from the title; the extra 8px margin is removed)
 
