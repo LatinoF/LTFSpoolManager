@@ -41,7 +41,7 @@ body {
         border: 1px solid rgba(59,130,246,0.35);
         color: var(--accent);
     }
-    .cloud-indicator { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--success); margin-left: 8px; flex-shrink: 0; }
+    .cloud-indicator { display: inline-flex; align-items: center; margin-left: 8px; color: var(--success); flex-shrink: 0; }
     .cloud-indicator[hidden] { display: none; }
     .cloud-indicator.off { color: var(--danger); }
     .container { max-width: 1000px; margin: 0 auto; padding: 0 1rem; padding-bottom: 120px; }
@@ -183,10 +183,13 @@ body {
     .preset-dot { width: 28px; height: 28px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.15); cursor: pointer; transition: 0.2s; }
     .preset-dot.active { border-color: white; transform: scale(1.15); box-shadow: 0 0 12px rgba(255,255,255,0.2); }
 
-    .btn { border: none; height: 46px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+    .btn { border: none; height: 46px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease; }
     .btn-icon { width: 46px; height: 46px; flex: 0 0 46px; padding: 0; }
     .btn-success { background: var(--success); color: white; }
+    .btn-success:not(:disabled):hover { background: #0d9668; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35); }
     .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); width: auto; }
+    .btn-outline:not(:disabled):hover { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+    .btn-icon:not(:disabled):hover { border-color: var(--accent); background: rgba(59,130,246,0.08); color: var(--accent); }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .close-modal { transition: color 0.2s ease, transform 0.2s ease; }
