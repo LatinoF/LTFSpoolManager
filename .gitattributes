@@ -1,0 +1,8 @@
+# Normalize line endings: LF in the repo, platform-native on checkout
+* text=auto
+*.png binary
+*.svg binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary

@@ -332,11 +332,11 @@ body {
         <div class="modal-content">
             <div class="close-modal" onclick="closeModal('modal-cloud')"><i data-lucide="x"></i></div>
             <h4 style="margin:0">Cloud Backup</h4>
-            <div class="section-label">Nextcloud WebDAV</div>
-            <input type="url" id="cloud-server" placeholder="https://cloud.example.com">
+            <div class="section-label">Nextcloud Server</div>
+            <input type="url" id="cloud-server" placeholder="https://nextcloud.example.com">
             <div class="row">
-                <input type="text" id="cloud-username" placeholder="Username">
-                <input type="password" id="cloud-password" placeholder="Password">
+                <button class="btn btn-outline" id="cloud-connect-btn" onclick="connectNextcloud()"><i data-lucide="plug-zap" style="width:16px"></i> Connect with Nextcloud</button>
+                <button class="btn btn-outline" id="cloud-disconnect-btn" onclick="disconnectCloud()" style="display:none"><i data-lucide="unplug" style="width:16px"></i> Disconnect</button>
             </div>
             <div class="section-label">Backup folder</div>
             <div class="row">
@@ -437,6 +437,12 @@ let state = { h: 0, s: 0, v: 0, color: '#000000' };
 // --- CLOUD BACKUP STATE ---
 let cloud = {};
 try { cloud = JSON.parse(localStorage.getItem(CLOUD_KEY) || '{}'); } catch (e) { cloud = {}; }
+// Drop legacy stored credentials (superseded by the WebAppPassword token flow)
+if (cloud.username || cloud.password) {
+    cloud.username = undefined;
+    cloud.password = undefined;
+    localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
+}
 let lastCloudBackup = localStorage.getItem(CLOUD_LAST_KEY) || '';
 
 lucide.createIcons();
@@ -944,26 +950,56 @@ if (window.history.state && window.history.state.view === 'detail') {
     renderDashboard();
 }
 
-// --- CLOUD BACKUP (NEXTCLOUD WEBDAV) ---
+// --- CLOUD BACKUP (NEXTCLOUD VIA WEBAPPPASSWORD) ---
+let oauthWindow = null;
+let connectResolver = null;
+let autoReconnectAttempted = false;
+
 function base64Encode(str) {
     const bytes = new TextEncoder().encode(str);
     let bin = '';
     bytes.forEach(b => bin += String.fromCharCode(b));
     return btoa(bin);
 }
-function cloudConfigured() { return !!(cloud.server && cloud.username && cloud.password); }
-function davBaseUrl() { return cloud.server.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(cloud.username); }
+function cloudConfigured() { return !!(cloud.server && cloud.loginName && cloud.token); }
+function davBaseUrl() { return cloud.server.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(cloud.loginName); }
 function davFileUrl(relPath) {
     if (!relPath) return davBaseUrl();
     return davBaseUrl() + '/' + relPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 function davHeaders(extra) {
-    return Object.assign({ 'Authorization': 'Basic ' + base64Encode(cloud.username + ':' + cloud.password) }, extra || {});
+    return Object.assign({ 'Authorization': 'Basic ' + base64Encode(cloud.loginName + ':' + cloud.token) }, extra || {});
+}
+// Fetches a DAV resource with the current token; on 401 the token is stale,
+// so reconnect once (if not attempted yet) and retry with the fresh token.
+async function davFetch(url, options) {
+    let opts = Object.assign({}, options, { headers: Object.assign({}, options.headers, davHeaders()) });
+    let res = await fetch(url, opts);
+    if (res.status === 401 && cloudConfigured()) {
+        cloud.loginName = '';
+        cloud.token = '';
+        localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
+        updateConnectButtons();
+        if (!autoReconnectAttempted) {
+            autoReconnectAttempted = true;
+            setCloudStatus('Session expired. Reconnecting to Nextcloud...', true);
+            const ok = await connectNextcloud(true);
+            if (ok) {
+                opts = Object.assign({}, options, { headers: Object.assign({}, options.headers, davHeaders()) });
+                res = await fetch(url, opts);
+            } else {
+                setCloudStatus('Reconnect needed. Press "Connect with Nextcloud".', false);
+            }
+        } else {
+            setCloudStatus('Reconnect needed. Press "Connect with Nextcloud".', false);
+        }
+    }
+    return res;
 }
 async function davPropfind(relPath, depth) {
-    const res = await fetch(davFileUrl(relPath), {
+    const res = await davFetch(davFileUrl(relPath), {
         method: 'PROPFIND',
-        headers: davHeaders({ 'Depth': String(depth), 'Content-Type': 'application/xml' }),
+        headers: { 'Depth': String(depth), 'Content-Type': 'application/xml' },
         body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getlastmodified/></d:prop></d:propfind>'
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1014,50 +1050,110 @@ function updateCloudIndicator() {
         ? 'Cloud backup: today (' + lastCloudBackup + ')'
         : (lastCloudBackup ? 'Cloud backup: ' + lastCloudBackup + ' — daily backup pending' : 'Cloud backup: never');
 }
+function updateConnectButtons() {
+    const connectBtn = document.getElementById('cloud-connect-btn');
+    const disconnectBtn = document.getElementById('cloud-disconnect-btn');
+    if (!connectBtn || !disconnectBtn) return;
+    const connected = !!cloud.loginName && !!cloud.token;
+    connectBtn.style.display = connected ? 'none' : 'flex';
+    disconnectBtn.style.display = connected ? 'flex' : 'none';
+}
 function loadCloudSettingsIntoForm() {
     document.getElementById('cloud-server').value = cloud.server || '';
-    document.getElementById('cloud-username').value = cloud.username || '';
-    document.getElementById('cloud-password').value = cloud.password || '';
     document.getElementById('cloud-folder').value = cloud.folderPath || '';
+    updateConnectButtons();
 }
 function openCloudModal() {
     loadCloudSettingsIntoForm();
     setCloudStatus(cloudConfigured()
-        ? (lastCloudBackup ? 'Last backup: <b>' + lastCloudBackup + '</b>' : 'Configured. No backup yet — press "Backup now".')
-        : 'Not configured. Enter your Nextcloud details and save.', cloudConfigured());
+        ? 'Connected as <b>' + cloud.loginName + '</b>' + (lastCloudBackup ? ' — last backup <b>' + lastCloudBackup + '</b>' : ' — no backup yet.')
+        : 'Enter your Nextcloud server URL and press "Connect with Nextcloud".', cloudConfigured());
     toggleSettings();
     openModal('modal-cloud');
 }
 function saveCloudSettings() {
-    cloud = {
-        server: document.getElementById('cloud-server').value.trim().replace(/\/+$/, ''),
-        username: document.getElementById('cloud-username').value.trim(),
-        password: document.getElementById('cloud-password').value,
-        folderPath: (document.getElementById('cloud-folder').value.trim() || '').replace(/^\/+|\/+$/g, '')
-    };
+    const newServer = document.getElementById('cloud-server').value.trim().replace(/\/+$/, '');
+    const newFolder = (document.getElementById('cloud-folder').value.trim() || '').replace(/^\/+|\/+$/g, '');
+    if (cloud.server && cloud.server !== newServer) {
+        cloud.loginName = '';
+        cloud.token = '';
+    }
+    cloud.server = newServer;
+    cloud.folderPath = newFolder;
     localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
-    setCloudStatus('Settings saved. Testing connection...', true);
-    testCloudConnection();
+    updateConnectButtons();
+    setCloudStatus(cloudConfigured()
+        ? 'Settings saved. Connected as <b>' + cloud.loginName + '</b>'
+        : 'Settings saved. Press "Connect with Nextcloud" to authenticate.', cloudConfigured());
     updateCloudIndicator();
 }
+function disconnectCloud() {
+    cloud.loginName = '';
+    cloud.token = '';
+    localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
+    updateConnectButtons();
+    setCloudStatus('Disconnected. Press "Connect with Nextcloud" to authenticate.', false);
+    updateCloudIndicator();
+}
+// Opens the Nextcloud login popup; resolves true when the temp app password arrives.
+function connectNextcloud(silent) {
+    const server = (document.getElementById('cloud-server').value.trim() || '').replace(/\/+$/, '');
+    if (!server) { setCloudStatus('Enter the server URL first.', false); return false; }
+    const targetOrigin = window.location.href;
+    setCloudStatus('Waiting for the Nextcloud login window — log in there and allow access.', true);
+    oauthWindow = window.open(server + '/index.php/apps/webapppassword?target-origin=' + encodeURIComponent(targetOrigin), 'Nextcloud Login', 'width=420,height=500');
+    if (!oauthWindow) {
+        setCloudStatus('Popup blocked. Allow popups for this page and try again.', false);
+        return false;
+    }
+    return new Promise(resolve => {
+        connectResolver = resolve;
+        setTimeout(() => {
+            if (connectResolver) {
+                const r = connectResolver;
+                connectResolver = null;
+                setCloudStatus('Connection timed out. Press "Connect with Nextcloud" again.', false);
+                r(false);
+            }
+        }, 120000);
+    });
+}
+// Receives the temp app password from the WebAppPassword popup.
+window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || data.type !== 'webapppassword') return;
+    if (cloud.server) {
+        try {
+            if (event.origin !== new URL(cloud.server).origin) return;
+        } catch (e) { return; }
+    }
+    cloud.loginName = data.loginName;
+    cloud.token = data.token;
+    localStorage.setItem(CLOUD_KEY, JSON.stringify(cloud));
+    if (oauthWindow) { try { oauthWindow.close(); } catch (e) {} oauthWindow = null; }
+    if (connectResolver) { const r = connectResolver; connectResolver = null; r(true); }
+    updateConnectButtons();
+    updateCloudIndicator();
+    setCloudStatus('Connected as <b>' + cloud.loginName + '</b>.', true);
+});
 async function testCloudConnection() {
-    if (!cloudConfigured()) { setCloudStatus('Missing server, username or password.', false); return false; }
+    if (!cloudConfigured()) { setCloudStatus('Connect to Nextcloud first (press "Connect with Nextcloud").', false); return false; }
     setCloudStatus('Testing connection...', true);
     try {
         await davPropfind(cloud.folderPath || '', 0);
-        setCloudStatus('Connected to <b>' + cloud.server + '</b>', true);
+        setCloudStatus('Connected to <b>' + cloud.server + '</b> as <b>' + cloud.loginName + '</b>', true);
         return true;
     } catch (err) {
-        setCloudStatus('Connection failed: ' + err.message + '. Check the server URL, credentials and the CORS setting (cors.allowed-domains) in Nextcloud.', false);
+        setCloudStatus('Connection failed: ' + err.message, false);
         return false;
     }
 }
 async function ensureDavFolder(path) {
     if (!path) return true;
-    let res = await fetch(davFileUrl(path), { method: 'MKCOL', headers: davHeaders() });
+    let res = await davFetch(davFileUrl(path), { method: 'MKCOL' });
     if (res.status === 201 || res.status === 405) return true;
     if (res.status === 301 || res.status === 302) {
-        res = await fetch(davFileUrl(path) + '/', { method: 'MKCOL', headers: davHeaders() });
+        res = await davFetch(davFileUrl(path) + '/', { method: 'MKCOL' });
         return res.status === 201 || res.status === 405 || res.status === 200;
     }
     return res.status === 200 || res.status === 204;
@@ -1066,16 +1162,16 @@ async function uploadBackup() {
     const today = dateName(new Date());
     const fileName = today + '_LTF_SpoolManager_DB.json';
     const target = davFileUrl(cloud.folderPath ? cloud.folderPath + '/' + fileName : fileName);
-    let res = await fetch(target, {
+    let res = await davFetch(target, {
         method: 'PUT',
-        headers: davHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(spools)
     });
     if (res.status === 404 || res.status === 409) {
         await ensureDavFolder(cloud.folderPath);
-        res = await fetch(target, {
+        res = await davFetch(target, {
             method: 'PUT',
-            headers: davHeaders({ 'Content-Type': 'application/json' }),
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(spools)
         });
     }
@@ -1087,7 +1183,7 @@ async function uploadBackup() {
     throw new Error('HTTP ' + res.status);
 }
 async function cloudBackupNow() {
-    if (!cloudConfigured()) { setCloudStatus('Configure the connection first.', false); return; }
+    if (!cloudConfigured()) { setCloudStatus('Connect to Nextcloud first.', false); return; }
     setCloudStatus('Uploading backup...', true);
     try {
         await uploadBackup();
@@ -1191,7 +1287,7 @@ async function openRestoreModal() {
 }
 async function restoreBackup(backup) {
     try {
-        const res = await fetch(davFileUrl(backup.rel), { method: 'GET', headers: davHeaders() });
+        const res = await davFetch(davFileUrl(backup.rel), { method: 'GET' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const parsed = migrateData(JSON.parse(await res.text()));
         askConfirmation("Restore Backup", 'Replace all current data with "' + backup.name + '"?', () => {

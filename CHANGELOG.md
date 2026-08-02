@@ -1,5 +1,16 @@
 # LTF Spool Manager - Changelog
 
+## v1.1.2 - 2026-08-02
+
+**Description:** Cloud Backup authentication rewritten to the WebAppPassword flow: the app now connects to Nextcloud via a login popup and uses a temporary app password (WebAppPassword Nextcloud app, which also enables the required CORS headers), instead of stored username/password Basic auth, which the browser cannot use cross-origin. Automatic reconnection on token expiry (once per session), legacy stored credentials dropped on load, and the connect/disconnect UI replaces the old credential fields.
+
+**Type:** patch
+
+**Notes:**
+- Requires the official WebAppPassword app (v26.6.0) installed on Nextcloud with allowed origins configured (e.g. `https://*.latinof.com`).
+- Temp app passwords expire; the app reconnects automatically once per session on 401, otherwise prompts to reconnect.
+- Credentials (temp token + login name) remain client-side only (localStorage).
+
 ## v1.1.1 - 2026-08-02
 
 **Description:** Cloud backup UI overhaul: uniform 46px control height across all modals (inputs, selects, buttons, chips), square icon-only Browse/Create/Back buttons, Test/Backup/Restore on a single row, "Restore from cloud..." shortened to "Restore", "App password" placeholder renamed to "Password", and the Cloud Backup settings button moved to the top of the settings submenu.
