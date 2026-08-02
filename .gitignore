@@ -1,0 +1,17 @@
+# Backup snapshots stay local-only
+Backups/
+Releases/
+
+# Environment
+.env
+.env.*
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.swp
