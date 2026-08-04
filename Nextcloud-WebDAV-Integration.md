@@ -11,7 +11,7 @@ A web page can only call another origin if that origin explicitly allows it via 
 The **WebAppPassword** app (by digital blueprint, official Nextcloud App Store) solves this with two mechanisms:
 
 1. **CORS headers** for the WebDAV/CalDAV endpoints (and optional OCS Share + Preview APIs), emitted for a configurable allowlist of origins — including the preflight `OPTIONS` handling browsers require.
-2. **Temporary app passwords** issued to the browser, so the page can authenticate as a logged-in Nextcloud user without ever handling the account password.
+2. **App passwords** issued to the browser, so the page can authenticate as a logged-in Nextcloud user without ever handling the account password — either a temporary token from the login flow (24 h default) or a permanent app password minted with `occ user:add-app-password`.
 
 Everything stays client-side: the Nextcloud credentials never leave the browser profile, and no server configuration beyond installing the app and listing allowed origins is required.
 
@@ -55,7 +55,25 @@ If the settings page values are empty, `config/config.php` keys are used:
 
 ---
 
-## 3. Authentication Flow (Endpoint Contract)
+## 3. Authentication
+
+Two authentication modes are supported: a **permanent app password** (recommended for fully automated sync — no expiry, no login ever) and the **login flow** (temporary token that expires and needs a reconnect).
+
+### 3.1 Permanent app password (optional, for fully automated sync)
+
+Minted once on the server with occ:
+
+```bash
+occ user:add-app-password <user> --name="my-web-app"
+```
+
+- The output token is a **permanent app password** — no expiry. Store it client-side (browser storage) and use it as the password for Basic auth, with the user's login name as the username.
+- WebDAV works with it out of the box. Operations that require the *login* password are not available with an app password — none are needed for file read/write.
+- Revocation anytime: `occ user:auth-tokens:delete`.
+- No popups, no gestures, no reconnect logic: the client simply sends `Authorization: Basic base64(user:permanentPassword)` on every request. A revoked or invalid token is reported and must be replaced manually.
+- Trade-off: the permanent credential lives in browser storage, so it should be revoked if the browser profile is ever compromised.
+
+### 3.2 Login flow (temporary token)
 
 The page obtains a temporary app password through a popup/tab flow:
 
@@ -148,7 +166,22 @@ Methods: `GET` (list, inherited, pending), `POST` (create), `PUT`/`DELETE` per s
 
 ## 5. Client-Side Reference
 
-Minimal pattern (plain JavaScript):
+Minimal pattern (plain JavaScript). With a permanent app password (section 3.1) the client skips the popup entirely: the auth header is built from the stored username + permanent password, with no message listener and no reconnect logic:
+
+```js
+// Permanent-password mode
+const auth = { user: "example", password: "permanent-app-password" };
+function authHeader() {
+  return "Basic " + btoa(auth.user + ":" + auth.password);
+}
+async function davFetch(url, options) {
+  return fetch(url, Object.assign({}, options, {
+    headers: Object.assign({ Authorization: authHeader() }, options.headers)
+  }));
+}
+```
+
+Login-flow mode:
 
 ```js
 const server = "https://nextcloud.example.com";
@@ -225,7 +258,7 @@ async function uploadFile(relPath, content, contentType) {
 ## 6. Security Notes
 
 - **Origin verification:** never accept the postMessage payload without checking `event.origin` against the Nextcloud server origin.
-- **Token lifetime:** temporary app passwords expire; handle `401` by re-running the connect flow (at most once per session to avoid loops).
-- **Client-side only:** store the token in browser storage; never send it to your own backend or commit it.
+- **Token lifetime:** login-flow tokens expire (24 h default); handle `401` by re-running the connect flow (at most once per session to avoid loops). Permanent app passwords have no expiry; a `401` there means the token was revoked or the password changed — replace it manually.
+- **Client-side only:** store the token or permanent password in browser storage; never send it to your own backend or commit it. Revoke permanent app passwords with `occ user:auth-tokens:delete` if the browser profile is compromised.
 - **Allowlist scoping:** keep the allowed origins list as narrow as possible; wildcards cover every subdomain of a domain, so an origin on a shared or untrusted subdomain would also be allowed.
-- **Popups:** the connect window must open from a user gesture; be prepared for popup blockers (provide a fallback message and a manual "Connect" action).
+- **Popups:** the connect window must open from a user gesture; be prepared for popup blockers (provide a fallback message and a manual "Connect" action). The permanent-password mode avoids popups entirely.
