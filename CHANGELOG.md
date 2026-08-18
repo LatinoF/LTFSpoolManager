@@ -1,5 +1,8 @@
 # LTF Spool Manager - Changelog
 
+## v1.1.11 - 2026-08-19 (patch)
+- Fix: spool weights now display with exactly two decimal places instead of exposing floating-point precision artifacts
+
 ## v1.1.10 - 2026-08-02 (patch)
 - Added: permanent app-password mode for Cloud Backup — a username + permanent app password (minted via `occ user:auth-tokens:add`) grants a lifetime credential with no login, no expiry and no reconnects; the existing "Connect with Nextcloud" login flow remains available as an option
 - Change: the 401 auto-reconnect logic now applies only to the login-session mode (a permanent password that fails is simply reported, not re-attempted)

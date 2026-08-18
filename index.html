@@ -565,8 +565,8 @@ function renderDetail(i) {
                     <div style="text-align:right">
                         <small style="opacity:0.5; font-size:0.6rem; font-weight:800">Remaining</small>
                         <h1 style="margin:0; ${weightColorStyle}">
-                            ${s.currentWeight}<small style="font-size:1rem;">g</small>
-                            <span style="opacity:0.6; color: var(--text)"> / ${s.initialWeight}</span>
+                            ${Number(s.currentWeight).toFixed(2)}<small style="font-size:1rem;">g</small>
+                            <span style="opacity:0.6; color: var(--text)"> / ${Number(s.initialWeight).toFixed(2)}</span>
                             <small style="font-size:1rem; opacity:0.6; color: var(--text)">g</small>
                         </h1>
                     </div>
@@ -579,7 +579,7 @@ function renderDetail(i) {
                     <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.7rem; font-weight: 700; opacity: 0.6;">
                         <span>0g</span>
                         <span>${Math.round(perc)}% available</span>
-                        <span>${s.initialWeight}g</span>
+                        <span>${Number(s.initialWeight).toFixed(2)}g</span>
                     </div>
                 </div>
             </div>`;
@@ -994,7 +994,7 @@ function renderDashboard() {
                 </div>
                 <div class="progress-bar"><div class="progress-fill" style="width: ${perc}%; background: ${s.color}"></div></div>
                 <div class="card-footer">
-                    <div class="weight-text" style="color: ${weightColor}">${s.currentWeight}g <small style="opacity: 0.3; font-weight: 400; color: var(--text)">/ ${s.initialWeight}g</small></div>
+                    <div class="weight-text" style="color: ${weightColor}">${Number(s.currentWeight).toFixed(2)}g <small style="opacity: 0.3; font-weight: 400; color: var(--text)">/ ${Number(s.initialWeight).toFixed(2)}g</small></div>
                     <div style="font-size:0.8rem; font-weight: 800; opacity:0.6">${Math.round(perc)}%</div>
                 </div>
             </div>`;
